@@ -1,6 +1,12 @@
 # RedisSessions
 
-**TODO: Add description**
+This is a Elixir module to keep sessions in a Redis datastore and add some useful methods.
+The main purpose of this module is to generalize sessions across application server platforms.
+
+It's also an elixir port of the node.js module [redis-sessions](https://github.com/smrchy/redis-sessions).
+
+
+## 🚧 Currently work in progress
 
 ## Installation
 
@@ -21,4 +27,3 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
       [applications: [:redis_sessions]]
     end
     ```
-
