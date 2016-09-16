@@ -25,7 +25,8 @@ defmodule RedisSessions.Mixfile do
 			start_permanent: Mix.env == :prod,
 			deps: deps,
 			package: package,
-			description: description
+			description: description,
+			docs: [ extras: ["README.md"]]
 		]
 	end
 
@@ -58,8 +59,8 @@ defmodule RedisSessions.Mixfile do
 			{:poison, "~> 1.5 or ~> 2.0"},
 			{:vex, "~> 0.5"},
 			{:dialyze, "~> 0.2", only: :dev},
-			{:markdown, github: "devinus/markdown", only: :docs},
-			{:ex_doc, ">= 0.0.0", only: :docs}
+			{:earmark, ">= 0.0.0", only: [:docs, :dev]},
+			{:ex_doc, ">= 0.0.0", only: [:docs, :dev]}
 		]
 	end
 end
