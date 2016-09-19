@@ -1,15 +1,15 @@
 defmodule RedisSessions.Mixfile do
 	use Mix.Project
-
-	defp package do
-		[
-			files: ["lib", "mix.exs", "README.md", "LICENSE"],
-			maintainers: ["M. Peter"],
-			licenses: ["MIT"],
-			links: %{"GitHub" => "https://github.com/mpneuried/ex-redis-sessions"}
-		]
-	end
 	
+	defp package do
+	[
+		files: ["lib", "mix.exs", "README.md", "LICENSE"],
+		maintainers: ["M. Peter"],
+		licenses: ["MIT"],
+		links: %{"GitHub" => "https://github.com/mpneuried/ex-redis-sessions"}
+	]
+	end
+
 	defp description do
 		"""
 		An advanced session store for Elixir and NodeJS based on Redis
@@ -36,7 +36,7 @@ defmodule RedisSessions.Mixfile do
 	def application do
 		[
 			mod: {RedisSessions, []},
-			applications: [:logger]
+			applications: [:logger, :redis_sessions]
 		]
 	end
 
@@ -51,13 +51,11 @@ defmodule RedisSessions.Mixfile do
 	# Type "mix help deps" for more examples and options
 	defp deps do
 		[
-			{:redix, ">= 0.0.0"},
-			{:poolboy, "~> 1.4"},
-			{:poison, "~> 1.5 or ~> 2.0"},
-			{:vex, "~> 0.5"},
-			{:dialyze, "~> 0.2", only: :dev},
-			{:earmark, ">= 0.0.0", only: [:docs, :dev]},
-			{:ex_doc, ">= 0.0.0", only: [:docs, :dev]}
+			# {:redix, ">= 0.0.0"},
+			# {:poolboy, "~> 1.4"},
+			# {:dialyze, "~> 0.2", only: :dev},
+			# {:earmark, ">= 0.0.0", only: [:docs, :dev]},
+			# {:ex_doc, ">= 0.0.0", only: [:docs, :dev]}
 		]
 	end
 end

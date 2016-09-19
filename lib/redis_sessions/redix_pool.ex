@@ -28,8 +28,7 @@ defmodule RedisSessions.RedixPool do
 		]
 
 		children = [
-			:poolboy.child_spec( :redix_poolboy, pool_opts,	Application.get_env(:redis_sessions, :redis, [] )
-			)
+			:poolboy.child_spec( :redix_poolboy, pool_opts,	Application.get_env(:redis_sessions, :redis, [] ) )
 		]
 
 		supervise(children, strategy: :one_for_one, name: __MODULE__)
@@ -52,8 +51,10 @@ defmodule RedisSessions.RedixPool do
 	execute mutliple redis commands at once.
 	
 	## Examples
-		iex> RedisSessions.RedixPool.pipeline( [ ~w(SET redissessions-test woohoo!), ~w(GET redissessions-test)] )
-		{:ok, ["OK", "woohoo!"] }
+		iex> RedisSessions.RedixPool.pipeline( [ ~w(SET redissessions-test woohoo!), ~w(GET redissessions-test), ~w(DEL redissessions-test)] )
+		{:ok, ["OK", "woohoo!", 1] }
+		iex> RedisSessions.RedixPool.pipeline( [ [ "SET", "redissessions-list", "woohoo!"], ["GET", "redissessions-list"], [ "DEL", "redissessions-list" ]] )
+		{:ok, ["OK", "woohoo!", 1] }
 	"""
 	def pipeline(commands) do
 		:poolboy.transaction(:redix_poolboy, &Redix.pipeline(&1, commands))

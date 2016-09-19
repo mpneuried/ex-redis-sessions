@@ -4,12 +4,18 @@ defmodule RedisSessions do
 	# See http://elixir-lang.org/docs/stable/elixir/Application.html
 	# for more information on OTP Applications
 	def start(_type, _args) do
+		start_link
+	end
+	
+	
+	
+	def start_link( opts \\ [] ) do
 		import Supervisor.Spec, warn: false
 
 		# Define workers and child supervisors to be supervised
 		children = [
 			supervisor(RedisSessions.RedixPool, []),
-			#worker( RedisSessions.Client, [], restart: :transient )
+			worker( RedisSessions.Client, [], restart: :transient )
 		]
 
 		# See http://elixir-lang.org/docs/stable/elixir/Supervisor.html
