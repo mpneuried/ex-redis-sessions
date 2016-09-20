@@ -8,7 +8,7 @@ defmodule RedisSessions.Client do
 	@type session :: %{ id: String.t, r: integer, w: integer, idle: integer, ttl: integer, d: Map.t }
 	@type ip :: {integer, integer, integer, integer}
 	
-	@tokenchars "ABCDEFGHIJKLMNOPQRSTUVWXYabcdefghijklmnopqrstuvwxyz0123456789" |> String.split("")
+	@tokenchars "ABCDEFGHIJKLMNOPQRSTUVWabcdefghijklmnopqrstuvw0123456789" |> String.split("", trim: true)
 	@redisns Application.get_env( :redis_sessions, :ns, "rs" ) <> ":"
 	
 	use GenServer
@@ -29,28 +29,8 @@ defmodule RedisSessions.Client do
 	@tag :skiptest
 	
 	## Examples
-		iex>RedisSessions.Client.create( "exrs-test??", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
-		{:error, [ {:app, :invalidFormat, "Invalid app format"} ]}
-		iex>res = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar", ping: "pong"} )
-		...>{:ok, %{token: token}} = res
-		...>is_binary( token )
-		true
-		iex>res = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar", ping: nil} )
-		...>{:ok, %{token: token}} = res
-		...>is_binary( token )
-		true
-		iex>res = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ ping: nil} )
-		...>{:ok, %{token: token}} = res
-		...>is_binary( token )
-		true
-		iex>RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, "abc" )
-		{:error, [ {:d, :invalidValue, "d must be an object"} ]}
-		iex>RedisSessions.Client.create( "exrs-test??", "??", "127.0.0.1.127.0.0.1.127.0.0.1.127.0.0.1.127.0.0.1.127.0.0.1", 3600, "abc" )
-		{:error, [ {:app, :invalidFormat, "Invalid app format"},{:id, :invalidFormat, "Invalid id format"},{:ip, :invalidFormat, "Invalid ip format"},{:d, :invalidValue, "d must be an object"} ]}
-		iex>res = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
-		...>{:ok, %{token: token}} = res
-		...>is_binary( token )
-		true
+		{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar", ping: "pong"} )
+
 	"""
 	@spec create( app, id, ip, integer, Map.t, node) :: boolean
 	def create( app, id, ip, ttl \\ 3600, data \\ nil, server \\ nil  ) do
@@ -81,9 +61,9 @@ defmodule RedisSessions.Client do
 	
 	## Examples
 	
-		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
-		...>RedisSessions.Client.set( "exrs-test", token, %{ foo: "buzz"} )
-		{:ok, %{ id: "foo", r:1, w:2, idle: 1, ttl: 3600, d: %{foo: "buzz"} }}
+		{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
+		RedisSessions.Client.set( "exrs-test", token, %{ foo: "buzz"} )
+		# {:ok, %{ id: "foo", r:1, w:2, idle: 3, ttl: 3600, d: %{foo: "buzz"} }}
 		
 	"""
 	@spec set( app, token, Map.t, node) :: {:ok, session} | { :error, String.t }
@@ -104,13 +84,13 @@ defmodule RedisSessions.Client do
 	
 	## Examples
 	
-		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
-		...>RedisSessions.Client.get( "exrs-test", token )
-		{:ok, %{ id: "foo", r:1, w:1, idle: 1, ttl: 3600, d: %{foo: "bar"} }}
+		{:ok, %{ token: token }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
+		RedisSessions.Client.get( "exrs-test", token )
+		# {:ok, %{ id: "foo", r: 2, w: 1, idle: 1, ttl: 3600, ip: "127.0.0.1", d: %{foo: "bar"} }}
 	"""
 	@spec get( app, token, node) :: {:ok, session} | { :error, String.t }
 	def get( app, token, server \\ node() ) do
-		GenServer.call( { __MODULE__, server }, { :get, { app, token } } )
+		GenServer.call( { __MODULE__, server }, { :get, { app, token, false } } )
 	end
 	
 	@doc """
@@ -125,9 +105,9 @@ defmodule RedisSessions.Client do
 	
 	## Examples
 	
-	iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
-	...>RedisSessions.Client.kill( "exrs-test", token )
-	{:killed, 1}
+		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
+		...>RedisSessions.Client.kill( "exrs-test", token )
+		{:killed, 1}
 	"""
 	@spec kill( app, token, node) :: {:killed, integer} | { :error, String.t }
 	def kill( app, token, server \\ node() ) do
@@ -269,7 +249,6 @@ defmodule RedisSessions.Client do
 			d: validate( :d )
 		) do
 			[] ->
-				# TODO call redis
 				now = DateTime.utc_now()
 				
 				token = create_token( now )
@@ -313,9 +292,42 @@ defmodule RedisSessions.Client do
 		{:reply, {:ok, "OK"}, opts}
 	end
 	
-	def handle_call( {:get, args}, _from, opts ) do
-		IO.inspect args
-		{:reply, {:ok, "OK"}, opts}
+	def handle_call( {:get,  {app, token, noupdate}}, _from, opts ) do
+		case Vex.errors( [ app: app, token: token ],
+			app: validate( :app ),
+			token: validate( :token )
+		) do
+			[] ->
+				cmd = [ "HMGET", "#{@redisns}#{app}:#{token}", "id", "r", "w", "ttl", "d", "la", "ip" ]
+				case RedisSessions.RedixPool.command( cmd ) do
+					{ :ok, result } ->
+						
+						session = prepare_session( result )
+						cond do
+							nil === session ->
+								{:reply,{:ok, nil}, opts}
+							noupdate ->
+								{:reply,{:ok, session}, opts}
+							%{} = session ->
+								case update_counter( app, token, session, :r ) do
+									{:error, error } ->
+										{:reply, {:error, error}, opts}
+									session ->
+										{:reply,{:ok, session}, opts}
+								end
+						end
+
+					{ :error, error} ->
+						{:reply, {:error, error}, opts}
+				end
+			errors ->
+				case errormsg( errors ) do
+					errors when is_list( errors ) ->
+						{:reply, {:error, errors }, opts}
+					errors ->
+						{:reply, {:error, [errors] }, opts}
+				end
+		end
 	end
 	
 	def handle_call( {:kill, args}, _from, opts ) do
@@ -366,6 +378,38 @@ defmodule RedisSessions.Client do
 		random_string() <> "Z" <> str36_datetime( date )
 	end
 	
+	defp prepare_session( [ id, r, w, ttl, d, la, ip ] ) do
+		now = ts
+		session = %{
+			id: id,
+			r: String.to_integer(r),
+			w: String.to_integer(w),
+			ttl: String.to_integer(ttl),
+			d: Poison.decode!(d, keys: :atoms!),
+			idle: now - String.to_integer(la),
+			ip: ip
+		}
+		IO.inspect session
+		IO.inspect now
+		cond do
+			session.ttl < session.idle -> nil
+			true -> session
+		end
+	end
+	
+	defp update_counter( app, token, session, key, inc \\ 1 ) do
+		session = Map.update!( session, key, &(&1 + inc) )
+		
+		cmd = ["hincrby", "#{@redisns}#{app}:#{token}", Atom.to_string( key ), inc] 
+		
+		case RedisSessions.RedixPool.command( cmd ) do
+			{ :ok, result } ->
+				session
+			{ :error, error} ->
+				{:error, error}
+		end
+	end
+	
 	defp validate( :app ) do
 		[
 			presence: true,
@@ -391,6 +435,13 @@ defmodule RedisSessions.Client do
 		[
 			presence: true,
 			by: [function: &( is_integer( &1 ) and &1 > 10 )]
+		]
+	end
+	
+	defp validate( :token ) do
+		[
+			presence: true,
+			format: [ with: ~r/^([a-zA-Z0-9]){64}$/i]
 		]
 	end
 	
@@ -451,11 +502,7 @@ defmodule RedisSessions.Client do
    end
 	
 	defp random_string( length \\ 55, chars \\ @tokenchars ) do
-		Enum.reduce((1..length), [], fn (_i, acc) ->
-			[Enum.random(chars) | acc]
-		end)
-			|> Enum.join("")
-			|> String.downcase()
+		1..length |> Enum.map_join( fn (_) -> Enum.random(chars) end)
 	end
 	
 	defp ts( date \\ DateTime.utc_now() ) do
