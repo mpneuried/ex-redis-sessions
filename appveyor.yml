@@ -1,0 +1,32 @@
+# http://www.appveyor.com/docs/appveyor-yml
+version: build{build}
+
+platform: Any CPU
+shallow_clone: true
+
+# Install scripts. (runs after repo cloning)
+install:
+  # Install the Redis
+  - nuget install redis-64 -excludeversion
+  - redis-64\tools\redis-server.exe --service-install
+  - redis-64\tools\redis-server.exe --service-start
+  - '@ECHO Redis Started'
+  # Install elixir
+  - cinst elixir
+  - cinst mingw
+  - SET PATH=C:\ProgramData\chocolatey\lib\Elixir\bin;C:\tools\mingw64\bin;%PATH%
+  # Install module
+  - mix local.hex --force
+  - mix deps.get
+  - mix compile
+  
+# Post-install test scripts.
+test_script:
+  - set "MIX_ENV=test" && mix test --trace --cover
+
+# Don't actually build using MSBuild
+build: off
+
+os:
+  - Default Azure
+  - Windows Server 2012 R2
