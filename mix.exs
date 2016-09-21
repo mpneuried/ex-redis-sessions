@@ -20,7 +20,7 @@ defmodule RedisSessions.Mixfile do
 		[
 			app: :redis_sessions,
 			version: "0.0.0",
-			elixir: "~> 1.2",
+			elixir: "~> 1.3",
 			build_embedded: Mix.env == :prod,
 			start_permanent: Mix.env == :prod,
 			deps: deps,
