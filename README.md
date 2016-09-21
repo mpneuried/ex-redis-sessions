@@ -1,6 +1,7 @@
 # RedisSessions
 
 [![Travis Build Status](https://img.shields.io/travis/mpneuried/ex-redis-sessions.svg)](https://travis-ci.org/mpneuried/ex-redis-sessions)
+[![Windows Tests](https://img.shields.io/appveyor/ci/mpneuried/ex-redis-sessions.svg?label=Windows%20Test)](https://ci.appveyor.com/project/mpneuried/ex-redis-sessions)
 [![Coveralls Coverage](https://img.shields.io/coveralls/mpneuried/ex-redis-sessions.svg)](https://coveralls.io/github/mpneuried/ex-redis-sessions)
 [![Hex.pm Version](https://img.shields.io/hexpm/v/exq.svg)](https://hex.pm/packages/redis_sessions)
 [![Deps Status](https://beta.hexfaktor.org/badge/all/github/mpneuried/ex-redis-sessions.svg?branch=master)](https://beta.hexfaktor.org/github/mpneuried/ex-redis-sessions)
