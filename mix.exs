@@ -57,7 +57,8 @@ defmodule RedisSessions.Mixfile do
 			{:vex, "~> 0.5"},
 			{:dialyze, "~> 0.2", only: :dev},
 			{:earmark, ">= 0.0.0", only: [:docs, :dev]},
-			{:ex_doc, ">= 0.0.0", only: [:docs, :dev]}
+			{:ex_doc, ">= 0.0.0", only: [:docs, :dev]},
+			{:credo, "~> 0.4", only: [:dev, :test]}
 		]
 	end
 end

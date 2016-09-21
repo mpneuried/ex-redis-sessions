@@ -6,15 +6,15 @@ defmodule RedisSessions.Client do
 	@type id :: String.t
 	@type token :: String.t
 	@type session :: %{ id: String.t, r: integer, w: integer, idle: integer, ttl: integer, d: Map.t }
-	@type ip :: {integer, integer, integer, integer}
-	
-	@tokenchars "ABCDEFGHIJKLMNOPQRSTUVWabcdefghijklmnopqrstuvw0123456789" |> String.split("", trim: true)
+	@type ip :: { integer, integer, integer, integer }
+
+	@tokenchars "ABCDEFGHIJKLMNOPQRSTUVWabcdefghijklmnopqrstuvw0123456789" |> String.split( "", trim: true )
 	@redisns Application.get_env( :redis_sessions, :ns, "rs" ) <> ":"
-	
+
 	use GenServer
-	
-	#alias RedisSessions.RedixPool, as: Redis
-	
+
+	alias RedisSessions.RedixPool, as: Redis
+
 	@doc """
 	Create a session
 
@@ -25,66 +25,65 @@ defmodule RedisSessions.Client do
 	* `ip` (Binary) IP address of the user. This is used to show all ips from which the user is logged in.
 	* `ttl` (Integer) *optional* The "Time-To-Live" for the session in seconds. Default: 7200.
 	* `d` (Map) *optional* Additional data to set for this sessions. (see the "set" method)
-	
+
 	@tag :skiptest
-	
+
 	## Examples
 		{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar", ping: "pong"} )
-
 	"""
 	@spec create( app, id, ip, integer, Map.t, node) :: boolean
 	def create( app, id, ip, ttl \\ 3600, data \\ nil, server \\ nil  ) do
 		server = if server == nil, do: node(), else: server
-		GenServer.call( {__MODULE__, server}, { :create, {app, id, ip, ttl, data}} )
+		GenServer.call( { __MODULE__, server }, { :create, { app, id, ip, ttl, data } } )
 	end
-	
+
 	@doc """
-	Set/Update/Delete custom data for a single session.  
+	Set/Update/Delete custom data for a single session.
 	All custom data is stored in the `d` object which is a simple hash object structure.
-	
-	`d` might contain a map with **one or more** keys with the following types: `binary`, `number`, `boolean`, `nil`. 
+
+	`d` might contain a map with **one or more** keys with the following types: `binary`, `number`, `boolean`, `nil`.
 	Keys with all values except `nil` will be stored. If a key containts `nil` the key will be removed.
-	
+
 	Note: If `d` already contains keys that are not supplied in the set request then these keys will be untouched.
-	
+
 	## Parameters
-	
+
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `token` (Binary) The generated session token. Must be [a-zA-Z0-9] and 64 chars long
 	* `d` (Map) *optional* Data to set. Must be a map with keys whose values only consist of binaries, numbers, boolean and nil.
-	
+
 	## Returns
-	
+
 	`{:ok, session }` the session data after change
-	
+
 	@tag :skiptest
-	
+
 	## Examples
-	
-		{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
+
+		{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		RedisSessions.Client.set( "exrs-test", token, %{ foo: "buzz"} )
 		# {:ok, %{ id: "foo", r:1, w:2, idle: 3, ttl: 3600, d: %{foo: "buzz"} }}
-		
+
 	"""
 	@spec set( app, token, Map.t, node) :: {:ok, session} | { :error, String.t }
 	def set( app, token, data \\ nil, server \\ nil ) do
-		GenServer.call( {__MODULE__, server}, { :set, {app, token, data}} )
+		GenServer.call( { __MODULE__, server }, { :set, { app, token, data } } )
 	end
-	
+
 	@doc """
-	
+
 	Get a session for an app and token
 
 	## Parameters
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `token` (Binary) The generated session token. Must be [a-zA-Z0-9] and 64 chars long
-	
+
 	@tag :skiptest
-	
+
 	## Examples
-	
-		{:ok, %{ token: token }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
+
+		{:ok, %{ token: token }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		RedisSessions.Client.get( "exrs-test", token )
 		# {:ok, %{ id: "foo", r: 2, w: 1, idle: 1, ttl: 3600, ip: "127.0.0.1", d: %{foo: "bar"} }}
 	"""
@@ -92,28 +91,28 @@ defmodule RedisSessions.Client do
 	def get( app, token, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :get, { app, token, false } } )
 	end
-	
+
 	@doc """
-	Kill a session for an app and token. 
+	Kill a session for an app and token.
 
 	## Parameters
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `token` (Binary) The generated session token. Must be [a-zA-Z0-9] and 64 chars long
-	
+
 	@tag :skiptest
-	
+
 	## Examples
-	
-		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
+
+		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		...>RedisSessions.Client.kill( "exrs-test", token )
 		{:killed, 1}
 	"""
-	@spec kill( app, token, node) :: {:killed, integer} | { :error, String.t }
+	@spec kill( app, token, node) :: { :killed, integer } | { :error, String.t }
 	def kill( app, token, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :kill, { app, token } } )
 	end
-	
+
 	@doc """
 	Query the amount of active session within the last 10 minutes (600 seconds). Note: Multiple sessions from the same user id will be counted as one.
 
@@ -121,20 +120,20 @@ defmodule RedisSessions.Client do
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `dt` (Integer) Delta time. Amount of seconds to check (e.g. 600 for the last 10 min.)
-	
+
 	@tag :skiptest
-	
+
 	## Examples
-	
-		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} ) 
+
+		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		...>RedisSessions.Client.activity( "exrs-test" )
 		{:ok, 1}
 	"""
-	@spec activity( app, integer, node) :: {:ok, integer} | { :error, String.t }
+	@spec activity( app, integer, node) :: { :ok, integer } | { :error, String.t }
 	def activity( app, dt \\ 600, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :activity, { app, dt } } )
 	end
-	
+
 	@doc """
 	Get all sessions of an app there were active within the last 10 minutes (600 seconds).
 
@@ -142,21 +141,21 @@ defmodule RedisSessions.Client do
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `dt` (Integer) Delta time. Amount of seconds to check (e.g. 600 for the last 10 min.)
-	
+
 	@tag :skiptest
-	
+
 	## Examples
-	
+
 		iex>{:ok, tokenA} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
 		...>{:ok, tokenB} = RedisSessions.Client.create( "exrs-test", "bar", "127.0.0.1", 3600 )
 		...>RedisSessions.Client.soapp( "exrs-test" )
 		{:ok, [ %{ id: "foo", r:1, w:1, idle: 1, ttl: 3600 }, %{ id: "bar", r:1, w:1, idle: 1, ttl: 3600 } ] }
 	"""
-	@spec soapp( app, integer, node) :: {:ok, [session]} | { :error, String.t }
+	@spec soapp( app, integer, node) :: { :ok, [ session ] } | { :error, String.t }
 	def soapp( app, dt \\ 600, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :soapp, { app, dt } } )
 	end
-	
+
 	@doc """
 	Get all sessions within an app that belong to a single id. This would be all sessions of a single user in case he is logged in on different browsers / devices.
 
@@ -164,22 +163,22 @@ defmodule RedisSessions.Client do
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `id` (Binary) The user id of this user.
-	
+
 	@tag :skiptest
-	
+
 	## Examples
-	
+
 		iex>{:ok, tokenA1} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
 		...>{:ok, tokenB1} = RedisSessions.Client.create( "exrs-test", "bar", "127.0.0.1", 3600 )
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.0.42", 3600 )
 		...>RedisSessions.Client.soid( "exrs-test", "foo" )
 		{:ok, [ %{ id: "foo", r:1, w:1, idle: 1, ttl: 3600 }, %{ id: "bar", r:1, w:1, idle: 1, ttl: 3600 } ] }
 	"""
-	@spec soid( app, id, node) :: {:ok, [session]} | { :error, String.t }
+	@spec soid( app, id, node) :: { :ok, [ session ] } | { :error, String.t }
 	def soid( app, id, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :soid, { app, id } } )
 	end
-	
+
 	@doc """
 	Kill all sessions of an id within an app
 
@@ -187,35 +186,35 @@ defmodule RedisSessions.Client do
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `id` (Binary) The user id of this user.
-	
+
 	@tag :skiptest
-	
+
 	## Examples
-	
+
 		iex>{:ok, tokenA1} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
 		...>{:ok, tokenB1} = RedisSessions.Client.create( "exrs-test", "bar", "127.0.0.1", 3600 )
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.0.42", 3600 )
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test2", "foo", "192.168.0.42", 3600 )
 		...>RedisSessions.Client.killsoid( "exrs-test", "foo" )
 		{:killed, 2 }
-	
+
 	"""
-	@spec killsoid( app, id, node) :: {:killed, integer} | { :error, String.t }
+	@spec killsoid( app, id, node) :: { :killed, integer } | { :error, String.t }
 	def killsoid( app, id, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :killsoid, { app, id } } )
 	end
-	
+
 	@doc """
 	Kill all sessions of an app
 
 	## Parameters
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
-	
+
 	@tag :skiptest
-	
+
 	## Examples
-	
+
 		iex>{:ok, tokenA1} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
 		...>{:ok, tokenB1} = RedisSessions.Client.create( "exrs-test", "bar", "127.0.0.1", 3600 )
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.0.42", 3600 )
@@ -223,15 +222,15 @@ defmodule RedisSessions.Client do
 		...>RedisSessions.Client.killall( "exrs-test" )
 		{:killed, 3 }
 	"""
-	@spec killall( app, node) :: {:killed, integer} | { :error, String.t }
+	@spec killall( app, node) :: { :killed, integer } | { :error, String.t }
 	def killall( app, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :killall, { app } } )
 	end
-	
+
 	####
 	# GENSERVER API
 	####
-	
+
 	@doc """
 	start genserver
 	"""
@@ -239,8 +238,8 @@ defmodule RedisSessions.Client do
 	def start_link() do
 		GenServer.start_link( __MODULE__, [], name: __MODULE__)
 	end
-	
-	def handle_call( {:create, {app, id, ip, ttl, data}}, _from, opts ) do
+
+	def handle_call( {:create, { app, id, ip, ttl, data } }, _from, opts ) do
 		case Vex.errors( [ app: app, id: id, ip: ip, ttl: ttl, d: data ],
 			app: validate( :app ),
 			id: validate( :id ),
@@ -250,13 +249,13 @@ defmodule RedisSessions.Client do
 		) do
 			[] ->
 				now = DateTime.utc_now()
-				
+
 				token = create_token( now )
-				
+
 				thesession = []
 				if not is_nil( data ) do
 					# filter nil values from data
-					data = Enum.filter( data, fn( {key, val} )->
+					data = Enum.filter( data, fn( { key, val } )->
 						not is_nil( val )
 					end ) |> Enum.reduce( %{}, fn( { key, val }, acc ) ->
 						Map.put( acc, key, val )
@@ -267,31 +266,31 @@ defmodule RedisSessions.Client do
 				end
 
 				thesession = [ "HMSET", "#{@redisns}#{app}:#{token}", "id", id, "r", 1, "w", 1, "ip", ip, "la", ts( now ), "ttl", ttl | thesession ]
-				mc = create_multi_statement( [["SADD", "#{@redisns}#{app}:us:#{id}", token], thesession ], { app, token, id, ttl }, now )
-			
-				case RedisSessions.RedixPool.pipeline( mc ) do
+				mc = create_multi_statement( [ [ "SADD", "#{@redisns}#{app}:us:#{id}", token ], thesession ], { app, token, id, ttl }, now )
+
+				case Redis.pipeline( mc ) do
 					{ :ok, [ _, _, _, _, "OK" ]} ->
-						{:reply,{:ok, %{ token: token}}, opts}
+						{ :reply, { :ok, %{ token: token } }, opts}
 					{ :ok, [ _, _, _, _, error ]} ->
-						{:reply, {:error, error}, opts}
+						{ :reply, { :error, error }, opts }
 					{ :error, error} ->
-						{:reply, {:error, error}, opts}
+						{ :reply, { :error, error }, opts }
 				end
 			errors ->
 				case errormsg( errors ) do
 					errors when is_list( errors ) ->
-						{:reply, {:error, errors }, opts}
+						{ :reply, {:error, errors }, opts}
 					errors ->
-						{:reply, {:error, [errors] }, opts}
+						{ :reply, {:error, [ errors ] }, opts}
 				end
 		end
 	end
-	
+
 	def handle_call( {:set, args}, _from, opts ) do
-		IO.inspect args
+		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
-	
+
 	def handle_call( {:get,  {app, token, noupdate}}, _from, opts ) do
 		case Vex.errors( [ app: app, token: token ],
 			app: validate( :app ),
@@ -299,21 +298,21 @@ defmodule RedisSessions.Client do
 		) do
 			[] ->
 				cmd = [ "HMGET", "#{@redisns}#{app}:#{token}", "id", "r", "w", "ttl", "d", "la", "ip" ]
-				case RedisSessions.RedixPool.command( cmd ) do
+				case Redis.command( cmd ) do
 					{ :ok, result } ->
-						
+
 						session = prepare_session( result )
 						cond do
 							nil === session ->
-								{:reply,{:ok, nil}, opts}
+								{ :reply, { :ok, nil }, opts }
 							noupdate ->
-								{:reply,{:ok, session}, opts}
+								{ :reply, { :ok, session }, opts}
 							%{} = session ->
 								case update_counter( app, token, session, :r ) do
 									{:error, error } ->
-										{:reply, {:error, error}, opts}
+										{ :reply, { :error, error }, opts }
 									session ->
-										{:reply,{:ok, session}, opts}
+										{ :reply,{ :ok, session }, opts }
 								end
 						end
 
@@ -323,155 +322,153 @@ defmodule RedisSessions.Client do
 			errors ->
 				case errormsg( errors ) do
 					errors when is_list( errors ) ->
-						{:reply, {:error, errors }, opts}
+						{ :reply, { :error, errors }, opts }
 					errors ->
-						{:reply, {:error, [errors] }, opts}
+						{ :reply, { :error, [errors] }, opts }
 				end
 		end
 	end
-	
+
 	def handle_call( {:kill, args}, _from, opts ) do
-		IO.inspect args
+		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
-	
+
 	def handle_call( {:activity, args}, _from, opts ) do
-		IO.inspect args
+		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
-	
+
 	def handle_call( {:soapp, args}, _from, opts ) do
-		IO.inspect args
+		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
-	
+
 	def handle_call( {:soid, args}, _from, opts ) do
-		IO.inspect args
+		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
-	
+
 	def handle_call( {:killsoid, args}, _from, opts ) do
-		IO.inspect args
+		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
-	
+
 	def handle_call( {:killall, args}, _from, opts ) do
-		IO.inspect args
+		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
-	
-	
+
+
 	####
 	# PRIVATE METHODS
 	####
-	
+
 	defp create_multi_statement( mc \\ [], { app, token, id, ttl }, date \\ DateTime.utc_now() ) do
 		now = ts( date )
-		
+
 		mc = [ ["ZADD", "#{@redisns}SESSIONS", "#{now}#{ttl}", "#{app}:#{token}:#{id}"] | mc ]
 		mc = [ ["ZADD", "#{@redisns}#{app}:_users", now, id] | mc ]
 		mc = [ ["ZADD", "#{@redisns}#{app}:_sessions", now, "#{token}:#{id}"] | mc ]
 		mc
 	end
-	
+
 	defp create_token( date \\ DateTime.utc_now() ) do
 		random_string() <> "Z" <> str36_datetime( date )
 	end
-	
+
 	defp prepare_session( [ id, r, w, ttl, d, la, ip ] ) do
 		now = ts
 		session = %{
 			id: id,
-			r: String.to_integer(r),
-			w: String.to_integer(w),
-			ttl: String.to_integer(ttl),
-			d: Poison.decode!(d, keys: :atoms!),
-			idle: now - String.to_integer(la),
+			r: String.to_integer( r ),
+			w: String.to_integer( w ),
+			ttl: String.to_integer( ttl ),
+			d: Poison.decode!( d, keys: :atoms! ),
+			idle: now - String.to_integer( la ),
 			ip: ip
 		}
-		IO.inspect session
-		IO.inspect now
 		cond do
 			session.ttl < session.idle -> nil
 			true -> session
 		end
 	end
-	
+
 	defp update_counter( app, token, session, key, inc \\ 1 ) do
 		session = Map.update!( session, key, &(&1 + inc) )
-		
-		cmd = ["hincrby", "#{@redisns}#{app}:#{token}", Atom.to_string( key ), inc] 
-		
-		case RedisSessions.RedixPool.command( cmd ) do
+
+		cmd = ["hincrby", "#{@redisns}#{app}:#{token}", Atom.to_string( key ), inc]
+
+		case Redis.command( cmd ) do
 			{ :ok, result } ->
 				session
-			{ :error, error} ->
-				{:error, error}
+			{ :error, error } ->
+				{:error, error }
 		end
 	end
-	
+
 	defp validate( :app ) do
 		[
 			presence: true,
 			format: [ with: ~r/^([a-zA-Z0-9_-]){3,20}$/]
 		]
 	end
-	
+
 	defp validate( :id ) do
 		[
 			presence: true,
 			format: [ with: ~r/^([a-zA-Z0-9_-]){1,64}$/]
 		]
 	end
-	
+
 	defp validate( :ip ) do
 		[
 			presence: true,
 			format: [ with: ~r/^.{1,39}$/]
 		]
 	end
-	
+
 	defp validate( :ttl ) do
 		[
 			presence: true,
 			by: [function: &( is_integer( &1 ) and &1 > 10 )]
 		]
 	end
-	
+
 	defp validate( :token ) do
 		[
 			presence: true,
 			format: [ with: ~r/^([a-zA-Z0-9]){64}$/i]
 		]
 	end
-	
+
 	defp validate( :dt ) do
 		[
 			presence: true,
 			by: [function: &( is_integer( &1 ) and &1 > 10 )]
 		]
 	end
-	
+
 	defp validate( :d ) do
 		[
 			by: [function: &is_map/1, allow_nil: true]
 		]
 	end
-	
+
 	defp validate( :d_req ) do
 		[
 			by: [function: &is_map/1]
 			# TODO add a more detailed validation. see https://github.com/smrchy/redis-sessions/blob/master/index.coffee#L613
 		]
 	end
-	
+
 	defp errormsg( errors ) when is_list( errors ) do
 		errors
 			|> Enum.map( fn( error )->
 				errormsg( error )
 			end )
 	end
-	
+
 	defp errormsg( {_err, key, type, msg } ) do
 		case { key, type } do
 			{:app, :format} ->
@@ -500,19 +497,19 @@ defmodule RedisSessions.Client do
 				{ key, :invalid, msg }
 		end
    end
-	
+
 	defp random_string( length \\ 55, chars \\ @tokenchars ) do
-		1..length |> Enum.map_join( fn (_) -> Enum.random(chars) end)
+		1..length |> Enum.map_join( fn (_) -> Enum.random( chars ) end)
 	end
-	
+
 	defp ts( date \\ DateTime.utc_now() ) do
 		date |> DateTime.to_unix( :milliseconds )
 	end
-	
+
 	defp str36_datetime( date \\ DateTime.utc_now() ) do
 		ts( date )
 			|> Integer.to_string( 36 )
 			|> String.downcase()
 	end
-	
+
 end
