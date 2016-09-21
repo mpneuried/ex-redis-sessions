@@ -13,11 +13,11 @@ install:
   - '@ECHO Redis Started'
   # Install elixir
   - cinst elixir
-  - cinst rebar3
   - cinst mingw
   - SET PATH=C:\ProgramData\chocolatey\lib\Elixir\bin;C:\tools\mingw64\bin;%PATH%
   # Install module
   - mix local.hex --force
+  - mix local.rebar --force
   - mix deps.get
   - mix compile
   
