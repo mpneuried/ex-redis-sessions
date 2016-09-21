@@ -126,7 +126,7 @@ defmodule RedisSessions.Client do
 
 		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		...>RedisSessions.Client.activity( "exrs-test" )
-		{:ok, 1}
+		{:ok, %{activity: 1}}
 	"""
 	@spec activity( app, integer, node) :: { :ok, integer } | { :error, String.t }
 	def activity( app, dt \\ 600, server \\ node() ) do
@@ -363,9 +363,20 @@ defmodule RedisSessions.Client do
 		end
 	end
 
-	def handle_call( {:activity, _args}, _from, opts ) do
-		#IO.inspect args
-		{:reply, {:ok, "OK"}, opts}
+	def handle_call( {:activity, {app, dt}}, _from, opts ) do
+		case Vex.errors( [ app: app, dt: dt ],
+			app: validate( :app ),
+			dt: validate( :dt )
+		) do
+			[] ->
+				case Redis.command [ "ZCOUNT", "#{@redisns}#{app}:_users", (DateTime.utc_now() |> ts) - dt, "+inf" ] do
+					{ :ok, result } ->
+						{:reply, {:ok, %{activity: result}}, opts}
+					{ :error, error} ->
+						{:reply, {:error, error}, opts}
+				end
+			errors -> handle_validation_errors( errors, opts )
+		end
 	end
 
 	def handle_call( {:soapp, _args}, _from, opts ) do

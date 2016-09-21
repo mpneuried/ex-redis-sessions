@@ -1,6 +1,6 @@
 defmodule RedisSessions.ClientTest do
 	use ExUnit.Case
-	doctest RedisSessions.Client, only: [kill: 3]
+	doctest RedisSessions.Client, only: [kill: 3, activity: 3]
 
 	@regex_token ~r/^[A-Z0-9]+$/i
 
@@ -54,7 +54,7 @@ defmodule RedisSessions.ClientTest do
 	test ".get/3" do
 		{:ok, %{ token: token }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		{:ok, %{ id: "foo", r: 2, w: 1, idle: idle, ttl: 3600, ip: "127.0.0.1", d: %{foo: "bar"} }} = RedisSessions.Client.get( "exrs-test", token )
-		assert idle < 10
+		assert idle < 100
 	end
 
 	test ".get/3 invalid app" do
@@ -141,10 +141,8 @@ defmodule RedisSessions.ClientTest do
 	test ".kill/3" do
 		{:ok, %{ token: token }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		{:ok, %{ id: "foo", r: 2, w: 1, idle: _, ttl: 3600, ip: "127.0.0.1", d: %{foo: "bar"} }} = RedisSessions.Client.get( "exrs-test", token )
-		res = RedisSessions.Client.kill( "exrs-test", token )
-		IO.inspect res
-		{:ok, %{ kill: 1}} = res
-		IO.inspect RedisSessions.Client.get( "exrs-test", token )
+		{:ok, %{ kill: 1}} = RedisSessions.Client.kill( "exrs-test", token )
+		{:ok, nil} = RedisSessions.Client.get( "exrs-test", token )
 	end
 
 	test ".kill/3 invalid app" do
