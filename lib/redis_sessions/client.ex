@@ -32,8 +32,7 @@ defmodule RedisSessions.Client do
 		{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar", ping: "pong"} )
 	"""
 	@spec create( app, id, ip, integer, Map.t, node) :: boolean
-	def create( app, id, ip, ttl \\ 3600, data \\ nil, server \\ nil  ) do
-		server = if server == nil, do: node(), else: server
+	def create( app, id, ip, ttl \\ 3600, data \\ nil, server \\ node()  ) do
 		GenServer.call( { __MODULE__, server }, { :create, { app, id, ip, ttl, data } } )
 	end
 
@@ -66,7 +65,7 @@ defmodule RedisSessions.Client do
 
 	"""
 	@spec set( app, token, Map.t, node) :: {:ok, session} | { :error, String.t }
-	def set( app, token, data \\ nil, server \\ nil ) do
+	def set( app, token, data \\ nil, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :set, { app, token, data } } )
 	end
 
@@ -104,11 +103,11 @@ defmodule RedisSessions.Client do
 
 	## Examples
 
-		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
+		iex>{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		...>RedisSessions.Client.kill( "exrs-test", token )
-		{:killed, 1}
+		{:ok, %{kill: 1} }
 	"""
-	@spec kill( app, token, node) :: { :killed, integer } | { :error, String.t }
+	@spec kill( app, token, node) :: { :kill, integer } | { :error, String.t }
 	def kill( app, token, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :kill, { app, token } } )
 	end
@@ -196,10 +195,10 @@ defmodule RedisSessions.Client do
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.0.42", 3600 )
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test2", "foo", "192.168.0.42", 3600 )
 		...>RedisSessions.Client.killsoid( "exrs-test", "foo" )
-		{:killed, 2 }
+		{:kill, 2 }
 
 	"""
-	@spec killsoid( app, id, node) :: { :killed, integer } | { :error, String.t }
+	@spec killsoid( app, id, node) :: { :kill, integer } | { :error, String.t }
 	def killsoid( app, id, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :killsoid, { app, id } } )
 	end
@@ -220,9 +219,9 @@ defmodule RedisSessions.Client do
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.0.42", 3600 )
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test2", "foo", "192.168.0.42", 3600 )
 		...>RedisSessions.Client.killall( "exrs-test" )
-		{:killed, 3 }
+		{:kill, 3 }
 	"""
-	@spec killall( app, node) :: { :killed, integer } | { :error, String.t }
+	@spec killall( app, node) :: { :kill, integer } | { :error, String.t }
 	def killall( app, server \\ node() ) do
 		GenServer.call( { __MODULE__, server }, { :killall, { app } } )
 	end
@@ -255,11 +254,7 @@ defmodule RedisSessions.Client do
 				thesession = []
 				if not is_nil( data ) do
 					# filter nil values from data
-					data = Enum.filter( data, fn( { key, val } )->
-						not is_nil( val )
-					end ) |> Enum.reduce( %{}, fn( { key, val }, acc ) ->
-						Map.put( acc, key, val )
-					end )
+					data = d_filter_nil( data )
 					if data !== %{} do
 						thesession = [ "d", Poison.encode!( data ) ]
 					end
@@ -276,85 +271,119 @@ defmodule RedisSessions.Client do
 					{ :error, error} ->
 						{ :reply, { :error, error }, opts }
 				end
-			errors ->
-				case errormsg( errors ) do
-					errors when is_list( errors ) ->
-						{ :reply, {:error, errors }, opts}
-					errors ->
-						{ :reply, {:error, [ errors ] }, opts}
-				end
+			errors -> handle_validation_errors( errors, opts )
 		end
 	end
 
-	def handle_call( {:set, args}, _from, opts ) do
-		#IO.inspect args
-		{:reply, {:ok, "OK"}, opts}
+	def handle_call( {:set, {app, token, data}}, _from, opts ) do
+		case Vex.errors( [ app: app, token: token, d: data ],
+			app: validate( :app ),
+			token: validate( :token ),
+			d: validate( :d )
+		) do
+			[] ->
+				case session_get( app, token, true ) do
+					{:ok, %{}=session} ->
+						
+						now = DateTime.utc_now()
+						thekey = "#{@redisns}#{app}:#{token}"
+						cmds = []
+						if not is_nil( data ) do
+							# filter nil values from data
+							nil_keys = map_get_nil_keys( data )
+							data = Map.merge( Map.drop( session.d, nil_keys ), Map.drop( data, nil_keys ) )
+							
+							if data !== %{} do
+								cmds = [ [ "HSET", thekey, "d", Poison.encode!( data ) ] | cmds ]
+								session = Map.put( session, :d, data )
+							else
+								cmds = [ [ "HDEL", thekey, "d" ] | cmds ]
+								session = Map.put( session, :d, nil )
+							end
+						else
+							cmds = [ [ "HDEL", thekey, "d" ] | cmds ]
+							session = Map.put( session, :d, nil )
+						end
+						
+						if session.idle > 1 do
+							cmds = [ [ "HSET", thekey, "la", ts( now ) ] | cmds ]
+						end
+						
+						cmds = [ [ "HINCRBY", thekey, "w", 1 ] | cmds ]
+						session = Map.update!( session, :w, &(&1+1) )
+						
+						mc = create_multi_statement( cmds, { app, token, session.id, session.ttl }, now )
+						
+						case Redis.pipeline( mc ) do
+							{ :ok, _} ->
+								{ :reply, { :ok, session }, opts }
+							{ :error, error} ->
+								{ :reply, { :error, error }, opts }
+						end
+
+					reply ->
+						{ :reply, reply, opts }
+				end
+			errors -> handle_validation_errors( errors, opts )
+		end
 	end
 
-	def handle_call( {:get,  {app, token, noupdate}}, _from, opts ) do
+	def handle_call( {:get, {app, token, noupdate}}, _from, opts ) do
 		case Vex.errors( [ app: app, token: token ],
 			app: validate( :app ),
 			token: validate( :token )
 		) do
 			[] ->
-				cmd = [ "HMGET", "#{@redisns}#{app}:#{token}", "id", "r", "w", "ttl", "d", "la", "ip" ]
-				case Redis.command( cmd ) do
-					{ :ok, result } ->
-
-						session = prepare_session( result )
-						cond do
-							nil === session ->
-								{ :reply, { :ok, nil }, opts }
-							noupdate ->
-								{ :reply, { :ok, session }, opts}
-							%{} = session ->
-								case update_counter( app, token, session, :r ) do
-									{:error, error } ->
-										{ :reply, { :error, error }, opts }
-									session ->
-										{ :reply,{ :ok, session }, opts }
-								end
-						end
-
-					{ :error, error} ->
-						{:reply, {:error, error}, opts}
-				end
-			errors ->
-				case errormsg( errors ) do
-					errors when is_list( errors ) ->
-						{ :reply, { :error, errors }, opts }
-					errors ->
-						{ :reply, { :error, [errors] }, opts }
-				end
+				{ :reply, session_get( app, token, noupdate ), opts }
+			errors -> handle_validation_errors( errors, opts )
 		end
 	end
 
-	def handle_call( {:kill, args}, _from, opts ) do
+	def handle_call( {:kill, { app, token }}, _from, opts ) do
+		#IO.inspect args
+		case Vex.errors( [ app: app, token: token ],
+			app: validate( :app ),
+			token: validate( :token )
+		) do
+			[] ->
+				case session_get( app, token, true ) do
+					{:ok, %{}=session} ->
+						
+						case kill_session( app, token, session ) do
+							{ :ok, deleted} ->
+								{ :reply, { :ok, %{ kill: deleted } }, opts }
+							{ :error, error} ->
+								{ :reply, { :error, error }, opts }
+						end
+
+					reply ->
+						{ :reply, reply, opts }
+				end
+			errors -> handle_validation_errors( errors, opts )
+		end
+	end
+
+	def handle_call( {:activity, _args}, _from, opts ) do
 		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
 
-	def handle_call( {:activity, args}, _from, opts ) do
+	def handle_call( {:soapp, _args}, _from, opts ) do
 		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
 
-	def handle_call( {:soapp, args}, _from, opts ) do
+	def handle_call( {:soid, _args}, _from, opts ) do
 		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
 
-	def handle_call( {:soid, args}, _from, opts ) do
+	def handle_call( {:killsoid, _args}, _from, opts ) do
 		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
 
-	def handle_call( {:killsoid, args}, _from, opts ) do
-		#IO.inspect args
-		{:reply, {:ok, "OK"}, opts}
-	end
-
-	def handle_call( {:killall, args}, _from, opts ) do
+	def handle_call( {:killall, _args}, _from, opts ) do
 		#IO.inspect args
 		{:reply, {:ok, "OK"}, opts}
 	end
@@ -363,6 +392,31 @@ defmodule RedisSessions.Client do
 	####
 	# PRIVATE METHODS
 	####
+	
+	defp session_get( app, token, noupdate ) do
+		cmd = [ "HMGET", "#{@redisns}#{app}:#{token}", "id", "r", "w", "ttl", "d", "la", "ip" ]
+		case Redis.command( cmd ) do
+			{ :ok, result } ->
+
+				session = prepare_session( result )
+				cond do
+					nil === session ->
+						{ :ok, nil }
+					noupdate ->
+						{ :ok, session }
+					%{} = session ->
+						case update_counter( app, token, session, :r ) do
+							{:error, error } ->
+								{ :error, error }
+							session ->
+								{ :ok, session }
+						end
+				end
+				
+			{ :error, error} ->
+				{:error, error}
+		end
+	end
 
 	defp create_multi_statement( mc \\ [], { app, token, id, ttl }, date \\ DateTime.utc_now() ) do
 		now = ts( date )
@@ -379,18 +433,52 @@ defmodule RedisSessions.Client do
 
 	defp prepare_session( [ id, r, w, ttl, d, la, ip ] ) do
 		now = ts
-		session = %{
-			id: id,
-			r: String.to_integer( r ),
-			w: String.to_integer( w ),
-			ttl: String.to_integer( ttl ),
-			d: Poison.decode!( d, keys: :atoms! ),
-			idle: now - String.to_integer( la ),
-			ip: ip
-		}
-		cond do
-			session.ttl < session.idle -> nil
-			true -> session
+		case id do
+			nil -> nil
+			_ ->
+				session = %{
+					id: id,
+					r: String.to_integer( r ),
+					w: String.to_integer( w ),
+					ttl: String.to_integer( ttl ),
+					idle: now - String.to_integer( la ),
+					ip: ip
+				}
+				
+				if d do
+					session = Map.put( session, :d, Poison.decode!( d, keys: :atoms! ) )
+				else
+					session = Map.put( session, :d, nil )
+				end
+				
+				cond do
+					session.ttl < session.idle -> nil
+					true -> session
+				end
+		end
+	end
+	
+	defp kill_session( app, token, session ) do
+		mc = [
+			["ZREM", "#{@redisns}#{app}:_sessions", "#{token}:#{session.id}"],
+			["SREM", "#{@redisns}#{app}:us:#{session.id}", token],
+			["ZREM", "#{@redisns}SESSIONS", "#{app}:#{token}:#{session.id}"],
+			["DEL", "#{@redisns}#{app}:#{token}"],
+			["EXISTS", "#{@redisns}#{app}:us:#{session.id}"]
+		]
+		
+		case Redis.pipeline( mc ) do
+			{ :ok, [ _, _, _, deleted, 0 ] } ->
+				case Redis.command [ "ZREM", "#{@redisns}#{app}:_users", session.id ] do
+					{ :ok, _ } ->
+						{:ok, deleted }
+					{ :error, error } ->
+						{:error, error }
+				end
+			{ :ok, [ _, _, _, deleted, _ ] } ->
+				{:ok, deleted }
+			{ :error, error } ->
+				{:error, error }
 		end
 	end
 
@@ -400,13 +488,42 @@ defmodule RedisSessions.Client do
 		cmd = ["hincrby", "#{@redisns}#{app}:#{token}", Atom.to_string( key ), inc]
 
 		case Redis.command( cmd ) do
-			{ :ok, result } ->
+			{ :ok, _ } ->
 				session
 			{ :error, error } ->
 				{:error, error }
 		end
 	end
-
+	
+	defp d_filter_nil( data ) do
+		Enum.filter( data, fn( { _, val } )->
+			not is_nil( val )
+		end ) |> Enum.reduce( %{}, fn( { key, val }, acc ) ->
+			Map.put( acc, key, val )
+		end )
+	end
+	
+	defp map_get_nil_keys( data ) do
+		data
+			|> Enum.filter( fn( { _, val } )->is_nil( val ) end)
+			|> Enum.reduce( [], fn ({key,_}, acc)-> [key|acc] end ) 
+	end
+	
+	defp map_get_non_nil_keys( data ) do
+		data
+			|> Enum.filter( fn( { _, val } )->not is_nil( val ) end)
+			|> Enum.reduce( [], fn ({key,_}, acc)-> [key|acc] end ) 
+	end
+	
+	defp handle_validation_errors( errors, opts ) do
+		case errormsg( errors ) do
+			errors when is_list( errors ) ->
+				{ :reply, { :error, errors }, opts }
+			errors ->
+				{ :reply, { :error, [errors] }, opts }
+		end
+	end
+	
 	defp validate( :app ) do
 		[
 			presence: true,
