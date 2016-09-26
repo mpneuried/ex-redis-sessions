@@ -124,7 +124,7 @@ defmodule RedisSessions.Client do
 
 	## Examples
 
-		iex>{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
+		iex>{:ok, _} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
 		...>RedisSessions.Client.activity( "exrs-test" )
 		{:ok, %{activity: 1}}
 	"""
@@ -148,7 +148,7 @@ defmodule RedisSessions.Client do
 		iex>{:ok, tokenA} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
 		...>{:ok, tokenB} = RedisSessions.Client.create( "exrs-test", "bar", "127.0.0.1", 3600 )
 		...>RedisSessions.Client.soapp( "exrs-test" )
-		{:ok, [ %{ id: "foo", r:1, w:1, idle: 1, ttl: 3600 }, %{ id: "bar", r:1, w:1, idle: 1, ttl: 3600 } ] }
+		{:ok, %{ sessions: [ %{ id: "foo", r: 1, w: 1, idle: 1, ttl: 3600, d: nil }, %{ id: "bar", r: 1, w: 1, idle: 1, ttl: 3600, d: nil } ] } }
 	"""
 	@spec soapp( app, integer, node) :: { :ok, [ session ] } | { :error, String.t }
 	def soapp( app, dt \\ 600, server \\ node() ) do
@@ -349,9 +349,9 @@ defmodule RedisSessions.Client do
 				case session_get( app, token, true ) do
 					{:ok, %{}=session} ->
 						
-						case kill_session( app, token, session ) do
-							{ :ok, deleted} ->
-								{ :reply, { :ok, %{ kill: deleted } }, opts }
+						case kill_sessions( app, token, session.id ) do
+							{ :ok, resutl} ->
+								{ :reply, { :ok, resutl }, opts }
 							{ :error, error} ->
 								{ :reply, { :error, error }, opts }
 						end
@@ -379,19 +379,56 @@ defmodule RedisSessions.Client do
 		end
 	end
 
-	def handle_call( {:soapp, _args}, _from, opts ) do
-		#IO.inspect args
-		{:reply, {:ok, "OK"}, opts}
+	def handle_call( {:soapp, {app, dt}}, _from, opts ) do
+		case Vex.errors( [ app: app, dt: dt ],
+			app: validate( :app ),
+			dt: validate( :dt )
+		) do
+			[] ->
+				case Redis.command [ "ZREVRANGEBYSCORE", "#{@redisns}#{app}:_sessions", "+inf", (DateTime.utc_now() |> ts) - dt ] do
+					{ :ok, result } ->
+						sessions = result
+							|> Enum.map( &(Enum.at( String.split(&1, ":" ), 0)) )
+						{:reply, grep_sessions( app, sessions ), opts}
+					{ :error, error} ->
+						{:reply, {:error, error}, opts}
+				end
+			errors -> handle_validation_errors( errors, opts )
+		end
 	end
 
-	def handle_call( {:soid, _args}, _from, opts ) do
-		#IO.inspect args
-		{:reply, {:ok, "OK"}, opts}
+	def handle_call( {:soid, {app, id}}, _from, opts ) do
+		case Vex.errors( [ app: app, id: id ],
+			app: validate( :app ),
+			id: validate( :id )
+		) do
+			[] ->
+				case sessions_of_id( app, id ) do
+					{ :ok, result } ->
+						{:reply, result, opts}
+					{ :error, error} ->
+						{:reply, error, opts}
+				end
+			errors -> handle_validation_errors( errors, opts )
+		end
 	end
 
-	def handle_call( {:killsoid, _args}, _from, opts ) do
-		#IO.inspect args
-		{:reply, {:ok, "OK"}, opts}
+	def handle_call( {:killsoid, {app, id}}, _from, opts ) do
+		case Vex.errors( [ app: app, id: id ],
+			app: validate( :app ),
+			id: validate( :id )
+		) do
+			[] ->
+				case session_tokens( app, id ) do
+					{ :ok, [] } ->
+						{:reply, { :ok, %{ kill: 0} }, opts}
+					{ :ok, tokens } ->
+						{:reply, kill_sessions( app, tokens, id), opts}
+					{ :error, error} ->
+						{:reply, error, opts}
+				end
+			errors -> handle_validation_errors( errors, opts )
+		end
 	end
 
 	def handle_call( {:killall, _args}, _from, opts ) do
@@ -469,27 +506,59 @@ defmodule RedisSessions.Client do
 		end
 	end
 	
-	defp kill_session( app, token, session ) do
-		mc = [
-			["ZREM", "#{@redisns}#{app}:_sessions", "#{token}:#{session.id}"],
-			["SREM", "#{@redisns}#{app}:us:#{session.id}", token],
-			["ZREM", "#{@redisns}SESSIONS", "#{app}:#{token}:#{session.id}"],
-			["DEL", "#{@redisns}#{app}:#{token}"],
-			["EXISTS", "#{@redisns}#{app}:us:#{session.id}"]
-		]
+	defp kill_sessions( app, token, id ) do
+		case token do
+			tkn when is_binary( token ) ->
+				mc = create_kill_statement( app, tkn, id )
+			tokens when is_list( token ) ->
+				mc = tokens
+					|> Enum.reduce( [], &( &2 ++ create_kill_statement( app, &1, id ) ) )
+		end
+		
+		mc = mc ++ [["EXISTS", "#{@redisns}#{app}:us:#{id}"]]
 		
 		case Redis.pipeline( mc ) do
-			{ :ok, [ _, _, _, deleted, 0 ] } ->
-				case Redis.command [ "ZREM", "#{@redisns}#{app}:_users", session.id ] do
+			{ :ok, results } ->
+				deleted = results
+					|> Enum.chunk( 4 )
+					|> Enum.reduce( 0, fn( [ _, _, _, deleted ], acc ) -> acc + deleted end )
+				
+				case Redis.command [ "ZREM", "#{@redisns}#{app}:_users", id ] do
 					{ :ok, _ } ->
-						{:ok, deleted }
+						{:ok, %{kill: deleted } }
 					{ :error, error } ->
 						{:error, error }
 				end
-			{ :ok, [ _, _, _, deleted, _ ] } ->
-				{:ok, deleted }
 			{ :error, error } ->
 				{:error, error }
+		end
+	end
+	
+	defp create_kill_statement( app, token, id ) do
+		[
+			["ZREM", "#{@redisns}#{app}:_sessions", "#{token}:#{id}"],
+			["SREM", "#{@redisns}#{app}:us:#{id}", token],
+			["ZREM", "#{@redisns}SESSIONS", "#{app}:#{token}:#{id}"],
+			["DEL", "#{@redisns}#{app}:#{token}"]
+		]
+	end
+	
+	
+	defp session_tokens( app, id ) do
+		case Redis.command [ "SMEMBERS", "#{@redisns}#{app}:us:#{id}" ] do
+			{ :ok, tokens } ->
+				{:ok, tokens }
+			{ :error, error} ->
+				{:error, error}
+		end
+	end
+	
+	def sessions_of_id( app, id ) do
+		case session_tokens( app, id ) do
+			{ :ok, tokens } ->
+				{:ok, grep_sessions( app, tokens ) }
+			{ :error, error} ->
+				{:error, error}
 		end
 	end
 
@@ -501,6 +570,24 @@ defmodule RedisSessions.Client do
 		case Redis.command( cmd ) do
 			{ :ok, _ } ->
 				session
+			{ :error, error } ->
+				{:error, error }
+		end
+	end
+	
+	defp grep_sessions( _app, [] ) do
+		{ :ok, %{ sessions: [] } }
+	end
+	
+	defp grep_sessions( app, sessions ) do
+		mc = sessions
+			|> Enum.map( &( ["hmget", "#{@redisns}#{app}:#{&1}", "id", "r", "w", "ttl", "d", "la", "ip"] ) )
+		case Redis.pipeline( mc ) do
+			{ :ok, sessiondatas } ->
+				ret = sessiondatas
+					|> Enum.filter( &( &1 != nil ) )
+					|> Enum.map( &( prepare_session( &1 ) ) )
+				{ :ok, %{ sessions: ret } }
 			{ :error, error } ->
 				{:error, error }
 		end

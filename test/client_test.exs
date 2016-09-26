@@ -164,5 +164,129 @@ defmodule RedisSessions.ClientTest do
 	test ".kill/3 missing token" do
 		assert RedisSessions.Client.kill( "exrs-test", nil ) === {:error, [{:token, :missingParameter, "no token supplied"}, {:token, :invalidFormat, "Invalid token format"}]}
 	end
+	
+	###
+	# soapp/3
+	###
+	test ".soapp/3" do
+		{:ok, _} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
+		{:ok, _} = RedisSessions.Client.create( "exrs-test", "bar", "127.0.0.1", 3600 )
+		{:ok, %{ sessions: sessions } } = RedisSessions.Client.soapp( "exrs-test" )
+		
+		# check for the expected session types
+		for session <- sessions do
+			:ok = case session do
+				%{ id: "foo", r: 1, w: 1, idle: _, ttl: 3600, ip: "127.0.0.1", d: nil } -> :ok
+				%{ id: "bar", r: 1, w: 1, idle: _, ttl: 3600, ip: "127.0.0.1", d: nil } -> :ok
+				_ -> session
+			end
+		end
+	end
+	
+	test ".soapp/3 with wait timeout dt" do
+		{:ok, _} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
+		IO.inspect "Wait for 12 sec. to check .soapp/3 timeout"
+		:timer.sleep(12000)
+		{:ok, _} = RedisSessions.Client.create( "exrs-test", "bar", "127.0.0.1", 3600 )
+		{:ok, _} = RedisSessions.Client.create( "exrs-test", "buzz", "127.0.0.1", 3600 )
+		{:ok, %{ sessions: sessions } } = RedisSessions.Client.soapp( "exrs-test", 11 )
+		
+		# check for the expected session types
+		for session <- sessions do
+			:ok = case session do
+				%{ id: "buzz", r: 1, w: 1, idle: _, ttl: 3600, ip: "127.0.0.1", d: nil } -> :ok
+				%{ id: "bar", r: 1, w: 1, idle: _, ttl: 3600, ip: "127.0.0.1", d: nil } -> :ok
+				_ -> session
+			end
+		end
+	end
+	
+	test ".soapp/3 unkown app" do
+		assert RedisSessions.Client.soapp( "exrs-test-unkown", 300 ) === {:ok, %{ sessions: [] } } 
+	end
+	
+	test ".soapp/3 invalid app" do
+		assert RedisSessions.Client.soapp( "exrs-test??" ) === {:error, [{:app, :invalidFormat, "Invalid app format"}]}
+	end
+
+	test ".soapp/3 missing app" do
+		assert RedisSessions.Client.soapp( nil ) === {:error, [{:app, :missingParameter, "no app supplied"}, {:app, :invalidFormat, "Invalid app format"}]}
+	end
+	
+	test ".soapp/3 invalid dt type" do
+		assert RedisSessions.Client.soapp( "exrs-test", "foo" ) === {:error, [{:dt, :invalidValue, "ttl must be a positive integer >= 10"}]}
+	end
+	
+	test ".soapp/3 invalid dt value" do
+		assert RedisSessions.Client.soapp( "exrs-test", 1 ) === {:error, [{:dt, :invalidValue, "ttl must be a positive integer >= 10"}]}
+	end
+	
+	###
+	# soid/3
+	###
+	test ".soid/3" do
+		{:ok, _} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
+		{:ok, _} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.1.1", 3600 )
+		{:ok, _} = RedisSessions.Client.create( "exrs-test", "buzz", "127.0.0.1", 3600 )
+		{:ok, %{ sessions: sessions } } = RedisSessions.Client.soid( "exrs-test", "foo" )
+		
+		# check for the expected session types
+		for session <- sessions do
+			:ok = case session do
+				%{ id: "foo", r: 1, w: 1, idle: _, ttl: 3600, ip: "127.0.0.1", d: nil } -> :ok
+				%{ id: "foo", r: 1, w: 1, idle: _, ttl: 3600, ip: "192.168.1.1", d: nil } -> :ok
+				_ -> session
+			end
+		end
+	end
+	
+	test ".soid/3 empty" do
+		assert RedisSessions.Client.soid( "exrs-test", "unkown" ) === {:ok, %{ sessions: [] } }
+	end
+
+	test ".soid/3 invalid app" do
+		assert RedisSessions.Client.soid( "exrs-test??", "foo" ) === {:error, [{:app, :invalidFormat, "Invalid app format"}]}
+	end
+
+	test ".soid/3 missing app" do
+		assert RedisSessions.Client.soid( nil, "foo" ) === {:error, [{:app, :missingParameter, "no app supplied"}, {:app, :invalidFormat, "Invalid app format"}]}
+	end
+	
+	test ".soid/3 invalid id type" do
+		assert RedisSessions.Client.soid( "exrs-test", "123?" ) === {:error, [{:id, :invalidFormat, "Invalid id format"}]}
+	end
+	
+	###
+	# soid/3
+	###
+	test ".killsoid/3" do
+		{:ok, %{ token: tokenA }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
+		{:ok, %{ token: tokenB }} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.1.1", 3600 )
+		{:ok, %{ token: tokenC }} = RedisSessions.Client.create( "exrs-test", "buzz", "127.0.0.1", 3600 )
+		
+		assert RedisSessions.Client.killsoid( "exrs-test", "foo" ) === {:ok, %{kill: 2} }
+		assert RedisSessions.Client.soid( "exrs-test", "foo" ) === {:ok, %{ sessions: [] } }
+		assert RedisSessions.Client.get( "exrs-test", tokenA ) === {:ok, nil}
+		assert RedisSessions.Client.get( "exrs-test", tokenB ) === {:ok, nil}
+		{:ok, %{ id: "buzz", r: 2, w: 1, idle: _, ttl: 3600, ip: "127.0.0.1", d: nil }} = RedisSessions.Client.get( "exrs-test", tokenC )
+	end
+	
+	test ".killsoid/3 empty" do
+		assert RedisSessions.Client.killsoid( "exrs-test", "unkown" ) === {:ok, %{ kill: 0 } }
+	end
+
+	test ".killsoid/3 invalid app" do
+		assert RedisSessions.Client.killsoid( "exrs-test??", "foo" ) === {:error, [{:app, :invalidFormat, "Invalid app format"}]}
+	end
+
+	test ".killsoid/3 missing app" do
+		assert RedisSessions.Client.killsoid( nil, "foo" ) === {:error, [{:app, :missingParameter, "no app supplied"}, {:app, :invalidFormat, "Invalid app format"}]}
+	end
+	
+	test ".killsoid/3 invalid id type" do
+		assert RedisSessions.Client.killsoid( "exrs-test", "123?" ) === {:error, [{:id, :invalidFormat, "Invalid id format"}]}
+	end
+	
+
 
 end
