@@ -26,8 +26,6 @@ defmodule RedisSessions.Client do
 	* `ttl` (Integer) *optional* The "Time-To-Live" for the session in seconds. Default: 7200.
 	* `d` (Map) *optional* Additional data to set for this sessions. (see the "set" method)
 
-	@tag :skiptest
-
 	## Examples
 		{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar", ping: "pong"} )
 	"""
@@ -55,8 +53,6 @@ defmodule RedisSessions.Client do
 
 	`{:ok, session }` the session data after change
 
-	@tag :skiptest
-
 	## Examples
 
 		{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
@@ -78,8 +74,6 @@ defmodule RedisSessions.Client do
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `token` (Binary) The generated session token. Must be [a-zA-Z0-9] and 64 chars long
 
-	@tag :skiptest
-
 	## Examples
 
 		{:ok, %{ token: token }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
@@ -98,8 +92,6 @@ defmodule RedisSessions.Client do
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `token` (Binary) The generated session token. Must be [a-zA-Z0-9] and 64 chars long
-
-	@tag :skiptest
 
 	## Examples
 
@@ -120,8 +112,6 @@ defmodule RedisSessions.Client do
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `dt` (Integer) Delta time. Amount of seconds to check (e.g. 600 for the last 10 min.)
 
-	@tag :skiptest
-
 	## Examples
 
 		iex>{:ok, _} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
@@ -140,8 +130,6 @@ defmodule RedisSessions.Client do
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `dt` (Integer) Delta time. Amount of seconds to check (e.g. 600 for the last 10 min.)
-
-	@tag :skiptest
 
 	## Examples
 
@@ -163,8 +151,6 @@ defmodule RedisSessions.Client do
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `id` (Binary) The user id of this user.
 
-	@tag :skiptest
-
 	## Examples
 
 		iex>{:ok, tokenA1} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
@@ -185,8 +171,6 @@ defmodule RedisSessions.Client do
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 	* `id` (Binary) The user id of this user.
-
-	@tag :skiptest
 
 	## Examples
 
@@ -210,8 +194,6 @@ defmodule RedisSessions.Client do
 
 	* `app` (Binary) The app id (namespace) for this session. Must be [a-zA-Z0-9_-] and 3-20 chars long.
 
-	@tag :skiptest
-
 	## Examples
 
 		iex>{:ok, tokenA1} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
@@ -226,6 +208,22 @@ defmodule RedisSessions.Client do
 		GenServer.call( { __MODULE__, server }, { :killall, { app } } )
 	end
 
+
+	@doc """
+	Wipe all deprecated sessions
+
+	## Parameters
+
+	## Examples
+
+		
+	"""
+	@spec wipe( node ) :: :ok
+	def wipe( server \\ node() ) do
+		GenServer.cast( { __MODULE__, server }, { :wipe } )
+		:ok
+	end
+	
 	####
 	# GENSERVER API
 	####
@@ -235,6 +233,9 @@ defmodule RedisSessions.Client do
 	"""
 	@spec start_link() :: true
 	def start_link() do
+		
+		:timer.apply_interval(600_000, __MODULE__, :wipe, [])
+		
 		GenServer.start_link( __MODULE__, [], name: __MODULE__)
 	end
 
@@ -447,6 +448,24 @@ defmodule RedisSessions.Client do
 			errors -> handle_validation_errors( errors, opts )
 		end
 	end
+	
+	def handle_cast( {:wipe}, opts ) do
+		case Redis.command [ "ZRANGEBYSCORE", "#{@redisns}SESSIONS", "-inf", (DateTime.utc_now() |> ts) ] do
+			{ :ok, sessions } ->
+				IO.inspect sessions
+				sessions
+					|> Enum.map( fn( session )->
+						[ app, token, id ] = String.split( session, ":" )
+						kill_sessions( app, token, id )
+					end )
+				
+			{ :error, error} ->
+				{:reply, {:error, error}, opts}
+		end
+		
+		{:noreply, opts}
+	end
+
 
 
 	####
