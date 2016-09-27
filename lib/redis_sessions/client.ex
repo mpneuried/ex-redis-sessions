@@ -431,9 +431,21 @@ defmodule RedisSessions.Client do
 		end
 	end
 
-	def handle_call( {:killall, _args}, _from, opts ) do
-		#IO.inspect args
-		{:reply, {:ok, "OK"}, opts}
+	def handle_call( {:killall, {app}}, _from, opts ) do
+		case Vex.errors( [ app: app],
+			app: validate( :app )
+		) do
+			[] ->
+				case kill_all( app ) do
+					{ :ok, [] } ->
+						{:reply, { :ok, %{ kill: 0} }, opts}
+					{ :ok, resp } ->
+						{:reply, { :ok, resp } , opts}
+					{ :error, error} ->
+						{:reply, error, opts}
+				end
+			errors -> handle_validation_errors( errors, opts )
+		end
 	end
 
 
@@ -543,6 +555,46 @@ defmodule RedisSessions.Client do
 		]
 	end
 	
+	defp kill_all( app ) do
+		
+		ask = "#{@redisns}#{app}:_sessions"
+		
+		case Redis.command [ "ZRANGE", ask, 0, -1 ] do
+			{ :ok, [] } ->
+				{:ok, %{ kill: 0} }
+			{ :ok, sessions } ->
+				
+				{ gk, tk, uk, ids } = sessions
+					|> Enum.reduce( { [], [], %MapSet{}, %MapSet{} }, fn( session, { gk, tk, uk, ids } )->
+						[ token, id ] = String.split( session, ":" )
+						
+						gk = [ "#{app}:#{session}" | gk ]
+						tk = [ "#{@redisns}#{app}:#{token}" | tk ]
+						
+						uk = MapSet.put( uk, "#{@redisns}#{app}:us:#{id}" )
+						ids = MapSet.put( ids, id )
+						
+						{ gk, tk, uk, ids }
+					end )
+					
+				mc = [
+					[ "ZREM", ask | sessions ],
+					[ "ZREM", "#{@redisns}#{app}:_users" | MapSet.to_list( ids ) ],
+					[ "ZREM", "#{@redisns}SESSIONS" | gk ],
+					[ "DEL" | MapSet.to_list( uk ) ],
+					[ "DEL" | tk ]
+				]
+				
+				case Redis.pipeline( mc ) do
+					{ :ok, [ count | t ] } ->
+						{:ok, %{ kill: count} }
+					{ :error, error } ->
+						{:error, error }
+				end
+			{ :error, error} ->
+				{:error, error}
+		end
+	end
 	
 	defp session_tokens( app, id ) do
 		case Redis.command [ "SMEMBERS", "#{@redisns}#{app}:us:#{id}" ] do

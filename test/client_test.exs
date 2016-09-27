@@ -287,6 +287,32 @@ defmodule RedisSessions.ClientTest do
 		assert RedisSessions.Client.killsoid( "exrs-test", "123?" ) === {:error, [{:id, :invalidFormat, "Invalid id format"}]}
 	end
 	
+	
+	###
+	# killall/2
+	###
+	test ".killall/2" do
+		{:ok, %{ token: tokenA }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600 )
+		{:ok, %{ token: tokenB }} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.1.1", 3600 )
+		{:ok, %{ token: tokenC }} = RedisSessions.Client.create( "exrs-test", "buzz", "127.0.0.1", 3600 )
+		
+		assert RedisSessions.Client.killall( "exrs-test" ) === {:ok, %{kill: 3} }
+		assert RedisSessions.Client.get( "exrs-test", tokenA ) === {:ok, nil}
+		assert RedisSessions.Client.get( "exrs-test", tokenB ) === {:ok, nil}
+		assert RedisSessions.Client.get( "exrs-test", tokenC ) === {:ok, nil}
+	end
+	
+	test ".killall/2 empty" do
+		assert RedisSessions.Client.killall( "exrs-test-unkown" ) === {:ok, %{ kill: 0 } }
+	end
+
+	test ".killall/2 invalid app" do
+		assert RedisSessions.Client.killall( "exrs-test??" ) === {:error, [{:app, :invalidFormat, "Invalid app format"}]}
+	end
+
+	test ".killall/2 missing app" do
+		assert RedisSessions.Client.killall( nil ) === {:error, [{:app, :missingParameter, "no app supplied"}, {:app, :invalidFormat, "Invalid app format"}]}
+	end
 
 
 end
