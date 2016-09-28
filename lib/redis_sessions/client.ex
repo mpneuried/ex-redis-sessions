@@ -12,6 +12,7 @@ defmodule RedisSessions.Client do
 	@redisns Application.get_env( :redis_sessions, :ns, "rs" ) <> ":"
 
 	use GenServer
+	import Logger
 
 	alias RedisSessions.RedixPool, as: Redis
 
@@ -27,7 +28,7 @@ defmodule RedisSessions.Client do
 	* `d` (Map) *optional* Additional data to set for this sessions. (see the "set" method)
 
 	## Examples
-		{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar", ping: "pong"} )
+		{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ "foo" => "bar", "ping" => "pong"} )
 	"""
 	@spec create( app, id, ip, integer, Map.t, node) :: boolean
 	def create( app, id, ip, ttl \\ 3600, data \\ nil, server \\ node()  ) do
@@ -55,9 +56,9 @@ defmodule RedisSessions.Client do
 
 	## Examples
 
-		{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
-		RedisSessions.Client.set( "exrs-test", token, %{ foo: "buzz"} )
-		# {:ok, %{ id: "foo", r:1, w:2, idle: 3, ttl: 3600, d: %{foo: "buzz"} }}
+		{:ok, token} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ "foo" => "bar"} )
+		RedisSessions.Client.set( "exrs-test", token, %{ "foo" => "buzz"} )
+		# {:ok, %{ id: "foo", r:1, w:2, idle: 3, ttl: 3600, d: %{"foo" => "buzz"} }}
 
 	"""
 	@spec set( app, token, Map.t, node) :: {:ok, session} | { :error, String.t }
@@ -76,9 +77,9 @@ defmodule RedisSessions.Client do
 
 	## Examples
 
-		{:ok, %{ token: token }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
+		{:ok, %{ token: token }} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ "foo" => "bar"} )
 		RedisSessions.Client.get( "exrs-test", token )
-		# {:ok, %{ id: "foo", r: 2, w: 1, idle: 1, ttl: 3600, ip: "127.0.0.1", d: %{foo: "bar"} }}
+		# {:ok, %{ id: "foo", r: 2, w: 1, idle: 1, ttl: 3600, ip: "127.0.0.1", d: %{"foo" => "bar"} }}
 	"""
 	@spec get( app, token, node) :: {:ok, session} | { :error, String.t }
 	def get( app, token, server \\ node() ) do
@@ -95,7 +96,7 @@ defmodule RedisSessions.Client do
 
 	## Examples
 
-		iex>{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
+		iex>{:ok, %{token: token}} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ "foo" => "bar"} )
 		...>RedisSessions.Client.kill( "exrs-test", token )
 		{:ok, %{kill: 1} }
 	"""
@@ -114,7 +115,7 @@ defmodule RedisSessions.Client do
 
 	## Examples
 
-		iex>{:ok, _} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ foo: "bar"} )
+		iex>{:ok, _} = RedisSessions.Client.create( "exrs-test", "foo", "127.0.0.1", 3600, %{ "foo" => "bar"} )
 		...>RedisSessions.Client.activity( "exrs-test" )
 		{:ok, %{activity: 1}}
 	"""
@@ -246,6 +247,7 @@ defmodule RedisSessions.Client do
 			d: validate( :d )
 		) do
 			[] ->
+				debug "create session of app `#{app}` with id: `#{id}` from ip: `#{ip}`"
 				now = DateTime.utc_now()
 
 				token = create_token( now )
@@ -281,6 +283,7 @@ defmodule RedisSessions.Client do
 			d: validate( :d )
 		) do
 			[] ->
+				debug "update session of app `#{app}` with token: `#{token}`"
 				case session_get( app, token, true ) do
 					{:ok, %{}=session} ->
 						
@@ -313,6 +316,8 @@ defmodule RedisSessions.Client do
 						
 						mc = create_multi_statement( cmds, { app, token, session.id, session.ttl }, now )
 						
+						debug "update session of app `#{app}` write id `#{session.id}`"
+						
 						case Redis.pipeline( mc ) do
 							{ :ok, _} ->
 								{ :reply, { :ok, session }, opts }
@@ -333,6 +338,7 @@ defmodule RedisSessions.Client do
 			token: validate( :token )
 		) do
 			[] ->
+				debug "get session of app `#{app}` with token: `#{token}`"
 				{ :reply, session_get( app, token, noupdate ), opts }
 			errors -> handle_validation_errors( errors, opts )
 		end
@@ -345,6 +351,7 @@ defmodule RedisSessions.Client do
 			token: validate( :token )
 		) do
 			[] ->
+				debug "kill session of app `#{app}` with token: `#{token}`"
 				case session_get( app, token, true ) do
 					{:ok, %{}=session} ->
 						
@@ -368,6 +375,7 @@ defmodule RedisSessions.Client do
 			dt: validate( :dt )
 		) do
 			[] ->
+				debug "get app `#{app}` activity"
 				case Redis.command [ "ZCOUNT", "#{@redisns}#{app}:_users", (DateTime.utc_now() |> ts) - dt, "+inf" ] do
 					{ :ok, result } ->
 						{:reply, {:ok, %{activity: result}}, opts}
@@ -384,6 +392,7 @@ defmodule RedisSessions.Client do
 			dt: validate( :dt )
 		) do
 			[] ->
+				debug "kill all sessions of app `#{app}`"
 				case Redis.command [ "ZREVRANGEBYSCORE", "#{@redisns}#{app}:_sessions", "+inf", (DateTime.utc_now() |> ts) - dt ] do
 					{ :ok, result } ->
 						sessions = result
@@ -402,6 +411,7 @@ defmodule RedisSessions.Client do
 			id: validate( :id )
 		) do
 			[] ->
+				debug "get all session of app `#{app}` with id: `#{id}`"
 				case sessions_of_id( app, id ) do
 					{ :ok, result } ->
 						{:reply, result, opts}
@@ -418,6 +428,7 @@ defmodule RedisSessions.Client do
 			id: validate( :id )
 		) do
 			[] ->
+				debug "kill all session of app `#{app}` with id: `#{id}`"
 				case session_tokens( app, id ) do
 					{ :ok, [] } ->
 						{:reply, { :ok, %{ kill: 0} }, opts}
@@ -435,6 +446,7 @@ defmodule RedisSessions.Client do
 			app: validate( :app )
 		) do
 			[] ->
+				debug "kill all session of app `#{app}`"
 				case kill_all( app ) do
 					{ :ok, [] } ->
 						{:reply, { :ok, %{ kill: 0} }, opts}
@@ -448,17 +460,22 @@ defmodule RedisSessions.Client do
 	end
 	
 	def handle_cast( {:wipe}, opts ) do
+		debug "wipe session call"
 		case Redis.command [ "ZRANGEBYSCORE", "#{@redisns}SESSIONS", "-inf", (DateTime.utc_now() |> ts) ] do
+			{ :ok, [] } ->
+				debug "wipe sessions empty"
 			{ :ok, sessions } ->
-				IO.inspect sessions
+				
+				info "wipe #{Enum.count( sessions )} sessions"
+				
 				sessions
 					|> Enum.map( fn( session )->
 						[ app, token, id ] = String.split( session, ":" )
 						kill_sessions( app, token, id )
 					end )
 				
-			{ :error, error} ->
-				{:reply, {:error, error}, opts}
+			{ :error, err} ->
+				error err
 		end
 		
 		{:noreply, opts}
@@ -474,7 +491,7 @@ defmodule RedisSessions.Client do
 		cmd = [ "HMGET", "#{@redisns}#{app}:#{token}", "id", "r", "w", "ttl", "d", "la", "ip" ]
 		case Redis.command( cmd ) do
 			{ :ok, result } ->
-
+				
 				session = prepare_session( result )
 				cond do
 					nil === session ->
@@ -495,7 +512,7 @@ defmodule RedisSessions.Client do
 		end
 	end
 
-	defp create_multi_statement( mc \\ [], { app, token, id, ttl }, date \\ DateTime.utc_now() ) do
+	defp create_multi_statement( mc, { app, token, id, ttl }, date \\ DateTime.utc_now() ) do
 		now = ts( date )
 
 		mc = [ ["ZADD", "#{@redisns}SESSIONS", "#{now}#{ttl}", "#{app}:#{token}:#{id}"] | mc ]
@@ -523,7 +540,7 @@ defmodule RedisSessions.Client do
 				}
 				
 				if d do
-					session = Map.put( session, :d, Poison.decode!( d, keys: :atoms! ) )
+					session = Map.put( session, :d, Poison.decode!( d ) )
 				else
 					session = Map.put( session, :d, nil )
 				end
@@ -603,7 +620,7 @@ defmodule RedisSessions.Client do
 				]
 				
 				case Redis.pipeline( mc ) do
-					{ :ok, [ count | t ] } ->
+					{ :ok, [ count | _t ] } ->
 						{:ok, %{ kill: count} }
 					{ :error, error } ->
 						{:error, error }
@@ -673,12 +690,6 @@ defmodule RedisSessions.Client do
 	defp map_get_nil_keys( data ) do
 		data
 			|> Enum.filter( fn( { _, val } )->is_nil( val ) end)
-			|> Enum.reduce( [], fn ({key,_}, acc)-> [key|acc] end ) 
-	end
-	
-	defp map_get_non_nil_keys( data ) do
-		data
-			|> Enum.filter( fn( { _, val } )->not is_nil( val ) end)
 			|> Enum.reduce( [], fn ({key,_}, acc)-> [key|acc] end ) 
 	end
 	

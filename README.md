@@ -56,10 +56,10 @@ Add additional data to the session - [`set/4`](https://hexdocs.pm/redis_sessions
 
 ```elixir
 session_token = "q3uvHvVqEcnTAaIsWSkgAcvDSKsTyVyameD3s7TjBU1lMVeB3hW7bsgZitfoxqkr"
-session_data = %{ my: "additional", data: 2, save: "to", my: "session" }
+session_data = %{ "my" => "additional", "data" => 2, "save" => "to", "my" => "session" }
 
 {:ok, session } = RedisSessions.Client.set( "appname", session_token, session_data )
-# session ->  %{ id: "the_users_id", r:2, w:2, idle: 3, ttl: 3600, ip: "127.0.0.1", d: %{ my: "additional", data: 2, save: "to", my: "session" } }
+# session ->  %{ id: "the_users_id", r:2, w:2, idle: 3, ttl: 3600, ip: "127.0.0.1", d: %{ "my" => "additional", "data" => 2, "save" => "to", "my" => "session" } }
 ```
 
 Kill a session - [`kill/3`](https://hexdocs.pm/redis_sessions/RedisSessions.Client.html#kill/3)
@@ -77,7 +77,7 @@ Get all sessions of a user's id - [`soid/3`](https://hexdocs.pm/redis_sessions/R
 ```elixir
 {:ok, sessions } = RedisSessions.Client.soid( "appname", "the_users_id" )
 # sessions ->  [
-#   %{ id: "the_users_id", r:2,  w:2,  idle: 3,  ttl: 3600, ip: "127.0.0.1", d: %{ my:"additional", data: 2, save: "to", my: "session" } },
+#   %{ id: "the_users_id", r:2,  w:2,  idle: 3,  ttl: 3600, ip: "127.0.0.1", d: %{ "my" => "additional", "data" => 2, "save" => "to", "my" => "session" } },
 #   %{ id: "the_users_id", r:13, w:23, idle: 42, ttl: 3600, ip: "192.168.1.23" }
 # ]
 ```
@@ -101,7 +101,7 @@ Get all sessions of an app - [`soapp/3`](https://hexdocs.pm/redis_sessions/Redis
 ```elixir
 {:ok, sessions } = RedisSessions.Client.soapp( "appname" )
 # sessions ->  [
-#   %{ id: "the_users_id", r: 2,  w: 2,  idle: 3,   ttl: 3600, ip: "127.0.0.1", d: %{ my:"additional", data: 2, save: "to", my: "session" } },
+#   %{ id: "the_users_id", r: 2,  w: 2,  idle: 3,   ttl: 3600, ip: "127.0.0.1", d: %{ "my" => "additional", "data" => 2, "save" => "to", "my" => "session" } },
 #   %{ id: "the_users_id", r: 13, w: 23, idle: 42,  ttl: 3600, ip: "192.168.1.23" },
 #   %{ id: "another_user", r: 1,  w: 42, idle: 666, ttl: 9999, ip: "192.168.1.13" }
 # ]
@@ -136,6 +136,7 @@ Attributes:
 
 |Version|Date|Description|
 |:--:|:--:|:--|
+|0.1.1|2016-09-28|use regular json encoding without key to atom feature. |
 |0.1.0|2016-09-28|Initial finished version|
 |0.0.1|2016-09-27|Main calls done|
 |0.0.0|2016-09-16|development ...|
