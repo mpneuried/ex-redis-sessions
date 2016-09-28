@@ -261,7 +261,7 @@ defmodule RedisSessions.Client do
 					end
 				end
 
-				thesession = [ "HMSET", "#{@redisns}#{app}:#{token}", "id", id, "r", 1, "w", 1, "ip", ip, "la", ts( now ), "ttl", ttl | thesession ]
+				thesession = [ "HMSET", "#{@redisns}#{app}:#{token}", "id", id, "r", 1, "w", 1, "ip", ip, "la", ts( now, :seconds ), "ttl", ttl | thesession ]
 				mc = create_multi_statement( [ [ "SADD", "#{@redisns}#{app}:us:#{id}", token ], thesession ], { app, token, id, ttl }, now )
 
 				case Redis.pipeline( mc ) do
@@ -308,7 +308,7 @@ defmodule RedisSessions.Client do
 						end
 						
 						if session.idle > 1 do
-							cmds = [ [ "HSET", thekey, "la", ts( now ) ] | cmds ]
+							cmds = [ [ "HSET", thekey, "la", ts( now, :seconds ) ] | cmds ]
 						end
 						
 						cmds = [ [ "HINCRBY", thekey, "w", 1 ] | cmds ]
@@ -526,7 +526,7 @@ defmodule RedisSessions.Client do
 	end
 
 	defp prepare_session( [ id, r, w, ttl, d, la, ip ] ) do
-		now = ts
+		now = DateTime.utc_now()
 		case id do
 			nil -> nil
 			_ ->
@@ -535,7 +535,7 @@ defmodule RedisSessions.Client do
 					r: String.to_integer( r ),
 					w: String.to_integer( w ),
 					ttl: String.to_integer( ttl ),
-					idle: now - String.to_integer( la ),
+					idle: ts( now, :seconds ) - String.to_integer( la ),
 					ip: ip
 				}
 				
@@ -797,8 +797,8 @@ defmodule RedisSessions.Client do
 		1..length |> Enum.map_join( fn (_) -> Enum.random( chars ) end)
 	end
 
-	defp ts( date \\ DateTime.utc_now() ) do
-		date |> DateTime.to_unix( :milliseconds )
+	defp ts( date \\ DateTime.utc_now(), resolution \\ :milliseconds  ) do
+		date |> DateTime.to_unix( resolution )
 	end
 
 	defp str36_datetime( date \\ DateTime.utc_now() ) do
