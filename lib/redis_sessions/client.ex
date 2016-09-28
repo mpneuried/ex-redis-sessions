@@ -179,7 +179,7 @@ defmodule RedisSessions.Client do
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.0.42", 3600 )
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test2", "foo", "192.168.0.42", 3600 )
 		...>RedisSessions.Client.killsoid( "exrs-test", "foo" )
-		{:kill, 2 }
+		{:ok, %{ kill: 2 }}
 
 	"""
 	@spec killsoid( app, id, node) :: { :kill, integer } | { :error, String.t }
@@ -201,7 +201,7 @@ defmodule RedisSessions.Client do
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test", "foo", "192.168.0.42", 3600 )
 		...>{:ok, tokenA2} = RedisSessions.Client.create( "exrs-test2", "foo", "192.168.0.42", 3600 )
 		...>RedisSessions.Client.killall( "exrs-test" )
-		{:kill, 3 }
+		{:ok, %{ kill: 3 }}
 	"""
 	@spec killall( app, node) :: { :kill, integer } | { :error, String.t }
 	def killall( app, server \\ node() ) do
@@ -213,10 +213,6 @@ defmodule RedisSessions.Client do
 	Wipe all deprecated sessions
 
 	## Parameters
-
-	## Examples
-
-		
 	"""
 	@spec wipe( node ) :: :ok
 	def wipe( server \\ node() ) do
@@ -234,7 +230,9 @@ defmodule RedisSessions.Client do
 	@spec start_link() :: true
 	def start_link() do
 		
-		:timer.apply_interval(600_000, __MODULE__, :wipe, [])
+		interval = Application.get_env( :redis_sessions, :wipe, 600 ) * 1000
+		
+		:timer.apply_interval(interval, __MODULE__, :wipe, [])
 		
 		GenServer.start_link( __MODULE__, [], name: __MODULE__)
 	end
@@ -624,7 +622,7 @@ defmodule RedisSessions.Client do
 		end
 	end
 	
-	def sessions_of_id( app, id ) do
+	defp sessions_of_id( app, id ) do
 		case session_tokens( app, id ) do
 			{ :ok, tokens } ->
 				{:ok, grep_sessions( app, tokens ) }

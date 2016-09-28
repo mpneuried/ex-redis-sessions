@@ -1,4 +1,7 @@
 defmodule RedisSessions do
+	@moduledoc """
+	Redis Sessions base module to handle the GenServer
+	"""
 	use Application
 
 	# See http://elixir-lang.org/docs/stable/elixir/Application.html
