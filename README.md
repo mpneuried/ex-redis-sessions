@@ -136,7 +136,7 @@ Attributes:
 
 |Version|Date|Description|
 |:--:|:--:|:--|
-|0.1.1|2016-09-28|use regular json encoding without key to atom feature. |
+|0.1.1|2016-09-28|use regular json encoding without key to atom feature. Added debug infos|
 |0.1.0|2016-09-28|Initial finished version|
 |0.0.1|2016-09-27|Main calls done|
 |0.0.0|2016-09-16|development ...|
