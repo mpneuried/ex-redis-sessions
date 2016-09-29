@@ -7,12 +7,10 @@ defmodule RedisSessions do
 	# See http://elixir-lang.org/docs/stable/elixir/Application.html
 	# for more information on OTP Applications
 	def start( _type, _args ) do
-		start_link
+		start_link( nil )
 	end
-
-
-
-	def start_link( opts \\ [ ] ) do
+	
+	def start_link( _opts ) do
 		import Supervisor.Spec, warn: false
 
 		# Define workers and child supervisors to be supervised
