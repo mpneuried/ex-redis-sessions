@@ -4,6 +4,8 @@ os:
   #- osx
 elixir:
   - 1.3.2
+  - 1.3
+  - master
 otp_release:
   - 18.2
 script:
