@@ -132,6 +132,14 @@ Attributes:
 - **`d`** `Map`: A map of additional data saved to this session
 
 
+## Config
+
+- **`ns`** *`Binary` defaukt: `rs`*: redis sessions namespace
+- **`wipe`** *`Number` defaukt: `600`*: redis sessions wipe timeout. If set to `0` automatic wipeing will be disabled
+- **`redis`** *`Binary`*: redis connection string. E.g. "redis://localhost:6379/0",
+- **`pool_size`** *`Number` defaukt: `1`*: redix/poolboy pool size
+- **`pool_overflow`** *`Number` defaukt: `0`*: redix/poolboy pool overflow
+
 ## Release History
 
 |Version|Date|Description|

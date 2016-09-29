@@ -13,25 +13,25 @@ defmodule RedisSessions.RedixPool do
 	start supervisor
 	"""
 	def start_link do
-		Supervisor.start_link(__MODULE__, [])
+		Supervisor.start_link( __MODULE__, [ ] )
 	end
 
 	@doc """
 	init redix pool
 	"""
-	def init(_) do
+	def init( _ ) do
 		pool_opts = [
-			name: {:local, :redix_poolboy},
+			name: { :local, :redix_poolboy },
 			worker_module: Redix,
-			size: Application.get_env(:redis_sessions, :pool_size, 10),
-			max_overflow: Application.get_env(:redis_sessions, :pool_overflow, 5)
+			size: Application.get_env( :redis_sessions, :pool_size, 10 ),
+			max_overflow: Application.get_env( :redis_sessions, :pool_overflow, 5 )
 		]
 
 		children = [
-			:poolboy.child_spec( :redix_poolboy, pool_opts,	Application.get_env(:redis_sessions, :redis, [] ) )
+			:poolboy.child_spec( :redix_poolboy, pool_opts,	Application.get_env( :redis_sessions, :redis, [ ] ) )
 		]
 
-		supervise(children, strategy: :one_for_one, name: __MODULE__)
+		supervise( children, strategy: :one_for_one, name: __MODULE__ )
 	end
 
 	@doc """
@@ -42,8 +42,8 @@ defmodule RedisSessions.RedixPool do
 		iex> RedisSessions.RedixPool.command ~w(PING)
 		{:ok, "PONG"}
 	"""
-	def command(command) do
-		:poolboy.transaction(:redix_poolboy, &Redix.command(&1, command))
+	def command( command ) do
+		:poolboy.transaction( :redix_poolboy, &Redix.command( &1, command ) )
 	end
 
 	@doc """
@@ -56,7 +56,7 @@ defmodule RedisSessions.RedixPool do
 		iex> RedisSessions.RedixPool.pipeline( [ [ "SET", "redissessions-list", "woohoo!"], ["GET", "redissessions-list"], [ "DEL", "redissessions-list" ]] )
 		{:ok, ["OK", "woohoo!", 1] }
 	"""
-	def pipeline(commands) do
-		:poolboy.transaction(:redix_poolboy, &Redix.pipeline(&1, commands))
+	def pipeline( commands )  do
+		:poolboy.transaction( :redix_poolboy, &Redix.pipeline( &1, commands ) ) 
 	end
 end
