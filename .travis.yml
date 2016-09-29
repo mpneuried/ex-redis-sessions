@@ -10,6 +10,7 @@ script:
   - MIX_ENV=test mix test --trace --cover
 after_success:
   - MIX_ENV=test mix credo -a
+  - coveralls
 services:
   - redis-server
 sudo: false
