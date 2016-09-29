@@ -8,7 +8,7 @@ otp_release:
   - 18.2
 script:
   - MIX_ENV=test mix test --trace --cover
-  #- MIX_ENV=test mix credo --strict
+  - MIX_ENV=test mix credo -a
 services:
   - redis-server
 sudo: false
