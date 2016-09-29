@@ -26,7 +26,8 @@ defmodule RedisSessions.Mixfile do
 			deps: deps,
 			package: package,
 			description: description,
-			docs: [ extras: ["README.md"], main: "readme"]
+			docs: [ extras: ["README.md"], main: "readme"],
+			test_coverage: [tool: ExCoveralls]
 		]
 	end
 
@@ -58,7 +59,8 @@ defmodule RedisSessions.Mixfile do
 			{:dialyze, "~> 0.2", only: :dev},
 			{:earmark, ">= 0.0.0", only: [:docs, :dev]},
 			{:ex_doc, ">= 0.0.0", only: [:docs, :dev]},
-			{:credo, "~> 0.4", only: [:dev, :test]}
+			{:credo, "~> 0.4", only: [:dev, :test]},
+			{:excoveralls, "~> 0.4", only: [:dev, :test]}
 		]
 	end
 end
