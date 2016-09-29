@@ -231,11 +231,14 @@ defmodule RedisSessions.Client do
 	@spec start_link() :: true
 	def start_link() do
 		
+		ret = GenServer.start_link( __MODULE__, [], name: __MODULE__)
+		
 		interval = Application.get_env( :redis_sessions, :wipe, 600 ) * 1000
+		if interval >= 10 do
+			:timer.apply_interval(interval, __MODULE__, :wipe, [])
+		end
 		
-		:timer.apply_interval(interval, __MODULE__, :wipe, [])
-		
-		GenServer.start_link( __MODULE__, [], name: __MODULE__)
+		ret
 	end
 
 	def handle_call( {:create, { app, id, ip, ttl, data } }, _from, opts ) do
