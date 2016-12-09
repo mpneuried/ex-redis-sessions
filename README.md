@@ -144,6 +144,7 @@ Attributes:
 
 |Version|Date|Description|
 |:--:|:--:|:--|
+|0.2.0|2016-12-09|Fixed configuration via system env like `{ :system, "CUSTOM_SESSIONS_WIPE", 120 }`; updated deps|
 |0.1.3|2016-09-29|fixed wipe config = 0; Optimized code based on credo hints; added automatic code coverage report|
 |0.1.2|2016-09-28|fixed la timestamp to seconds to be compatible with [redis-sessions](https://github.com/smrchy/redis-sessions)|
 |0.1.1|2016-09-28|use regular json encoding without key to atom feature. Added debug infos|

@@ -19,7 +19,7 @@ defmodule RedisSessions.Mixfile do
 	def project do
 		[
 			app: :redis_sessions,
-			version: "0.1.3",
+			version: "0.1.4",
 			elixir: "~> 1.3",
 			build_embedded: Mix.env == :prod,
 			start_permanent: Mix.env == :prod,
@@ -52,15 +52,15 @@ defmodule RedisSessions.Mixfile do
 	# Type "mix help deps" for more examples and options
 	defp deps do
 		[
-			{:redix, ">= 0.0.0"},
-			{:poolboy, "~> 1.4"},
-			{:poison, "~> 1.5 or ~> 2.0"},
-			{:vex, "~> 0.5"},
+			{:redix, "~> 0.4"},
+			{:poolboy, "~> 1.5"},
+			{:poison, "~> 1.5 or ~> 3.0"},
+			{:vex, "~> 0.6"},
 			{:dialyze, "~> 0.2", only: :dev},
 			{:earmark, ">= 0.0.0", only: [:docs, :dev]},
 			{:ex_doc, ">= 0.0.0", only: [:docs, :dev]},
-			{:credo, "~> 0.4", only: [:dev, :test]},
-			{:excoveralls, "~> 0.4", only: [:dev, :test]}
+			{:credo, "~> 0.5", only: [:dev, :test]},
+			{:excoveralls, "~> 0.5", only: [:dev, :test]}
 		]
 	end
 end

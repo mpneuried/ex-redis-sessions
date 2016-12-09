@@ -9,7 +9,6 @@ defmodule RedisSessions.Client do
 	@type ip :: { integer, integer, integer, integer }
 
 	@tokenchars "ABCDEFGHIJKLMNOPQRSTUVWabcdefghijklmnopqrstuvw0123456789" |> String.split( "", trim: true )
-	@redisns Application.get_env( :redis_sessions, :ns, "rs" ) <> ":"
 
 	use GenServer
 	import Logger
@@ -233,7 +232,7 @@ defmodule RedisSessions.Client do
 		
 		ret = GenServer.start_link( __MODULE__, [ ], name: __MODULE__ )
 		
-		interval = Application.get_env( :redis_sessions, :wipe, 600 ) * 1000
+		interval = get_interval( ) * 1000
 		if interval >= 10 do
 			:timer.apply_interval( interval, __MODULE__, :wipe, [ ] )
 		end
@@ -268,8 +267,8 @@ defmodule RedisSessions.Client do
 						end
 				end
 
-				thesession = [ "HMSET", "#{@redisns}#{app}:#{token}", "id", id, "r", 1, "w", 1, "ip", ip, "la", ts( now, :seconds ), "ttl", ttl | thesession ]
-				mc = create_multi_statement( [ [ "SADD", "#{@redisns}#{app}:us:#{id}", token ], thesession ], { app, token, id, ttl }, now )
+				thesession = [ "HMSET", "#{get_ns()}:#{app}:#{token}", "id", id, "r", 1, "w", 1, "ip", ip, "la", ts( now, :seconds ), "ttl", ttl | thesession ]
+				mc = create_multi_statement( [ [ "SADD", "#{get_ns()}:#{app}:us:#{id}", token ], thesession ], { app, token, id, ttl }, now )
 				
 				case Redis.pipeline( mc ) do
 					{ :ok, [ _, _, _, _, "OK" ] } ->
@@ -295,7 +294,7 @@ defmodule RedisSessions.Client do
 					{ :ok, %{ } = session } ->
 						
 						now = DateTime.utc_now( )
-						thekey = "#{@redisns}#{app}:#{token}"
+						thekey = "#{get_ns()}:#{app}:#{token}"
 												
 						{ session, cmds } = update_d_key( thekey, session, data, [ ] )
 						
@@ -365,7 +364,7 @@ defmodule RedisSessions.Client do
 		) do
 			[ ] ->
 				debug "get app `#{app}` activity"
-				case Redis.command [ "ZCOUNT", "#{@redisns}#{app}:_users", ( DateTime.utc_now( ) |> ts ) - dt, "+inf" ] do
+				case Redis.command [ "ZCOUNT", "#{get_ns()}:#{app}:_users", ( DateTime.utc_now( ) |> ts ) - dt, "+inf" ] do
 					{ :ok, result } ->
 						{ :reply, { :ok, %{ activity: result } }, opts }
 					{ :error, error } ->
@@ -382,7 +381,7 @@ defmodule RedisSessions.Client do
 		) do
 			[ ] ->
 				debug "kill all sessions of app `#{app}`"
-				case Redis.command [ "ZREVRANGEBYSCORE", "#{@redisns}#{app}:_sessions", "+inf", ( DateTime.utc_now( ) |> ts ) - dt ] do
+				case Redis.command [ "ZREVRANGEBYSCORE", "#{get_ns()}:#{app}:_sessions", "+inf", ( DateTime.utc_now( ) |> ts ) - dt ] do
 					{ :ok, result } ->
 						sessions = result
 							|> Enum.map( &( Enum.at( String.split( &1, ":" ), 0 ) ) )
@@ -450,7 +449,7 @@ defmodule RedisSessions.Client do
 	
 	def handle_cast( { :wipe }, opts ) do
 		debug "wipe session call"
-		case Redis.command [ "ZRANGEBYSCORE", "#{@redisns}SESSIONS", "-inf", ( DateTime.utc_now( ) |> ts ) ] do
+		case Redis.command [ "ZRANGEBYSCORE", "#{get_ns()}:SESSIONS", "-inf", ( DateTime.utc_now( ) |> ts ) ] do
 			{ :ok, [ ] } ->
 				debug "wipe sessions empty"
 			{ :ok, sessions } ->
@@ -476,7 +475,7 @@ defmodule RedisSessions.Client do
 	####
 	
 	defp session_get( app, token, noupdate ) do
-		cmd = [ "HMGET", "#{@redisns}#{app}:#{token}", "id", "r", "w", "ttl", "d", "la", "ip" ]
+		cmd = [ "HMGET", "#{get_ns()}:#{app}:#{token}", "id", "r", "w", "ttl", "d", "la", "ip" ]
 		case Redis.command( cmd ) do
 			{ :ok, result } ->
 				
@@ -503,9 +502,9 @@ defmodule RedisSessions.Client do
 	defp create_multi_statement( mc, { app, token, id, ttl }, date ) do
 		now = ts( date )
 
-		mc = [ [ "ZADD", "#{@redisns}SESSIONS", "#{now}#{ttl}", "#{app}:#{token}:#{id}" ] | mc ]
-		mc = [ [ "ZADD", "#{@redisns}#{app}:_users", now, id ] | mc ]
-		mc = [ [ "ZADD", "#{@redisns}#{app}:_sessions", now, "#{token}:#{id}" ] | mc ]
+		mc = [ [ "ZADD", "#{get_ns()}:SESSIONS", "#{now}#{ttl}", "#{app}:#{token}:#{id}" ] | mc ]
+		mc = [ [ "ZADD", "#{get_ns()}:#{app}:_users", now, id ] | mc ]
+		mc = [ [ "ZADD", "#{get_ns()}:#{app}:_sessions", now, "#{token}:#{id}" ] | mc ]
 		mc
 	end
 
@@ -551,7 +550,7 @@ defmodule RedisSessions.Client do
 				[ ]
 		end
 		
-		mc = mc ++ [ [ "EXISTS", "#{@redisns}#{app}:us:#{id}" ] ]
+		mc = mc ++ [ [ "EXISTS", "#{get_ns()}:#{app}:us:#{id}" ] ]
 		
 		case Redis.pipeline( mc ) do
 			{ :ok, results } ->
@@ -559,7 +558,7 @@ defmodule RedisSessions.Client do
 					|> Enum.chunk( 4 )
 					|> Enum.reduce( 0, fn( [ _, _, _, deleted ], acc ) -> acc + deleted end )
 				
-				case Redis.command [ "ZREM", "#{@redisns}#{app}:_users", id ] do
+				case Redis.command [ "ZREM", "#{get_ns()}:#{app}:_users", id ] do
 					{ :ok, _ } ->
 						{ :ok, %{ kill: deleted } }
 					{ :error, error } ->
@@ -572,16 +571,16 @@ defmodule RedisSessions.Client do
 	
 	defp create_kill_statement( app, token, id ) do
 		[
-			[ "ZREM", "#{@redisns}#{app}:_sessions", "#{token}:#{id}" ],
-			[ "SREM", "#{@redisns}#{app}:us:#{id}", token ],
-			[ "ZREM", "#{@redisns}SESSIONS", "#{app}:#{token}:#{id}" ],
-			[ "DEL", "#{@redisns}#{app}:#{token}" ]
+			[ "ZREM", "#{get_ns()}:#{app}:_sessions", "#{token}:#{id}" ],
+			[ "SREM", "#{get_ns()}:#{app}:us:#{id}", token ],
+			[ "ZREM", "#{get_ns()}:SESSIONS", "#{app}:#{token}:#{id}" ],
+			[ "DEL", "#{get_ns()}:#{app}:#{token}" ]
 		]
 	end
 	
 	defp kill_all( app ) do
 		
-		ask = "#{@redisns}#{app}:_sessions"
+		ask = "#{get_ns()}:#{app}:_sessions"
 		
 		case Redis.command [ "ZRANGE", ask, 0, -1 ] do
 			{ :ok, [ ] } ->
@@ -593,9 +592,9 @@ defmodule RedisSessions.Client do
 						[ token, id ] = String.split( session, ":" )
 						
 						gk = [ "#{app}:#{session}" | gk ]
-						tk = [ "#{@redisns}#{app}:#{token}" | tk ]
+						tk = [ "#{get_ns()}:#{app}:#{token}" | tk ]
 						
-						uk = MapSet.put( uk, "#{@redisns}#{app}:us:#{id}" )
+						uk = MapSet.put( uk, "#{get_ns()}:#{app}:us:#{id}" )
 						ids = MapSet.put( ids, id )
 						
 						{ gk, tk, uk, ids }
@@ -603,8 +602,8 @@ defmodule RedisSessions.Client do
 					
 				mc = [
 					[ "ZREM", ask | sessions ],
-					[ "ZREM", "#{@redisns}#{app}:_users" | MapSet.to_list( ids ) ],
-					[ "ZREM", "#{@redisns}SESSIONS" | gk ],
+					[ "ZREM", "#{get_ns()}:#{app}:_users" | MapSet.to_list( ids ) ],
+					[ "ZREM", "#{get_ns()}:SESSIONS" | gk ],
 					[ "DEL" | MapSet.to_list( uk ) ],
 					[ "DEL" | tk ]
 				]
@@ -621,7 +620,7 @@ defmodule RedisSessions.Client do
 	end
 	
 	defp session_tokens( app, id ) do
-		case Redis.command [ "SMEMBERS", "#{@redisns}#{app}:us:#{id}" ] do
+		case Redis.command [ "SMEMBERS", "#{get_ns()}:#{app}:us:#{id}" ] do
 			{ :ok, tokens } ->
 				{ :ok, tokens }
 			{ :error, error } ->
@@ -665,7 +664,7 @@ defmodule RedisSessions.Client do
 	defp update_counter( app, token, session, key, inc \\ 1 ) do
 		session = Map.update!( session, key, &( &1 + inc ) )
 
-		cmd = [ "hincrby", "#{@redisns}#{app}:#{token}", Atom.to_string( key ), inc ]
+		cmd = [ "hincrby", "#{get_ns()}:#{app}:#{token}", Atom.to_string( key ), inc ]
 
 		case Redis.command( cmd ) do
 			{ :ok, _ } ->
@@ -681,7 +680,7 @@ defmodule RedisSessions.Client do
 	
 	defp grep_sessions( app, sessions ) do
 		mc = sessions
-			|> Enum.map( &( [ "HMGET", "#{@redisns}#{app}:#{&1}", "id", "r", "w", "ttl", "d", "la", "ip" ] ) )
+			|> Enum.map( &( [ "HMGET", "#{get_ns()}:#{app}:#{&1}", "id", "r", "w", "ttl", "d", "la", "ip" ] ) )
 		case Redis.pipeline( mc ) do
 			{ :ok, sessiondatas } ->
 				ret = sessiondatas
@@ -823,5 +822,51 @@ defmodule RedisSessions.Client do
 			|> Integer.to_string( 36 )
 			|> String.downcase( )
 	end
-
+	
+	defp get_ns do
+		get_ns( Application.get_env( :redis_sessions, :ns, "rs" ) )
+	end
+	
+	defp get_ns( ns ) when is_binary( ns ) do
+		ns
+	end
+	
+	defp get_ns( { :system, envvar } ) do
+		get_ns( { :system, envvar, "rs" } )
+	end
+	
+	defp get_ns( { :system, envvar, default } ) do
+		sysvar = System.get_env( envvar )
+		if sysvar == nil do
+			default
+		else
+			sysvar
+		end
+	end
+	
+	defp get_interval do
+		get_interval( Application.get_env( :redis_sessions, :wipe, 600 ) )
+	end
+	
+	defp get_interval( interval ) when is_binary( interval ) do
+		String.to_integer( interval )
+	end
+	
+	defp get_interval( interval ) when is_number( interval ) do
+		interval
+	end
+	
+	defp get_interval( { :system, envvar } ) do
+		get_interval( { :system, envvar, 600 } )
+	end
+	
+	defp get_interval( { :system, envvar, default } ) do
+		sysvar = System.get_env( envvar )
+		if sysvar == nil do
+			default
+		else
+			sysvar
+		end
+	end
+	
 end
