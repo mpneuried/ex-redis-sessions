@@ -144,6 +144,7 @@ Attributes:
 
 |Version|Date|Description|
 |:--:|:--:|:--|
+|0.2.3|2017-08-01|optimized travic config and relaxed elixir version|
 |0.2.2|2017-08-01|updated dependencies and elixir requirement|
 |0.2.1|2016-12-09|relaxed poison dependency|
 |0.2.0|2016-12-09|Fixed configuration via system env like `{ :system, "CUSTOM_SESSIONS_WIPE", 120 }`; updated deps|
