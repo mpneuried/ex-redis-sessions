@@ -144,6 +144,7 @@ Attributes:
 
 |Version|Date|Description|
 |:--:|:--:|:--|
+|0.2.2|2017-08-01|updated dependencies and elixir requirement|
 |0.2.1|2016-12-09|relaxed poison dependency|
 |0.2.0|2016-12-09|Fixed configuration via system env like `{ :system, "CUSTOM_SESSIONS_WIPE", 120 }`; updated deps|
 |0.1.3|2016-09-29|fixed wipe config = 0; Optimized code based on credo hints; added automatic code coverage report|
