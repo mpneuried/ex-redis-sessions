@@ -3,10 +3,11 @@ os:
   - linux
   #- osx
 elixir:
-  - 1.3.2
-  - 1.3
+  - 1.4
+  - 1.5
 otp_release:
-  - 18.2
+  - 19
+  - 20
 script:
   - MIX_ENV=test mix test --trace
 after_success:
